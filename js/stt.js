@@ -71,18 +71,26 @@ export class STTManager {
   }
 
   handleAssemblyMessage(msg) {
+    // Reject if paused or if the message is not a 'Turn' event
     if (this.isPaused) return;
-    const type = msg.type || msg.message_type;
-    
-    if (type === 'PartialTranscript' || type === 'Partial') {
-      if (msg.text) this.callbacks.onInterim?.(msg.text);
-    }
-    
-    if (type === 'FinalTranscript' || type === 'Final') {
-      const text = (msg.text || "").trim();
-      if (!text) return;
-      const rawLabel = msg.speaker || msg.speaker_label;
-      this.callbacks.onFinal?.(text, rawLabel);
+    if (msg.type !== 'Turn') return;
+
+    // Extract the new v3 payload structure
+    const transcript = msg.transcript || "";
+    const isFinal = msg.end_of_turn === true;
+    const rawLabel = msg.speaker_label;
+
+    // Log to verify data flow (check browser console after deployment)
+    console.log(`[STT] v3 Turn received: end_of_turn=${isFinal}, text="${transcript}", speaker=${rawLabel}`);
+
+    if (!transcript.trim()) return;
+
+    if (!isFinal) {
+      // Partial (interim) transcription
+      this.callbacks.onInterim?.(transcript);
+    } else {
+      // Final, formatted transcription for this turn
+      this.callbacks.onFinal?.(transcript, rawLabel);
     }
   }
 
