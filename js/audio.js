@@ -25,11 +25,30 @@ export class AudioEngine {
       });
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       this.audioCtx = new AudioCtx({ sampleRate: 16000 });
+      
+      // Load and register the AudioWorklet processor
+      try {
+        await this.audioCtx.audioWorklet.addModule('js/audio-worklet-processor.js');
+        this.workletNode = new AudioWorkletNode(this.audioCtx, 'audio-stream-processor', {
+          numberOfInputs: 1,
+          numberOfOutputs: 0,
+          channelCount: 1
+        });
+      } catch (workletErr) {
+        console.error('[Audio] Worklet loading failed:', workletErr);
+      }
+
       await this.audioCtx.resume();
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.FFT_SIZE;
+      
       const src = this.audioCtx.createMediaStreamSource(this.mediaStream);
       src.connect(this.analyser);
+      
+      if (this.workletNode) {
+        src.connect(this.workletNode);
+      }
+      
       return true;
     } catch (e) {
       console.error('[Audio] Init failed:', e);
