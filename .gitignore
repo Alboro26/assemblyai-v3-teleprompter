@@ -1,0 +1,26 @@
+# --- OS Files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- IDEs and Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.project
+.settings/
+
+# --- Web / Node (Future proofing) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+dist/
+build/
+
+# --- Project Specific ---
+*.bat
+# (Keeping .md files as they are useful for auditors)

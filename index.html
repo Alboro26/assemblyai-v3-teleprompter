@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Interview Teleprompter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+  <header>
+    <div class="header-left">
+      <div class="logo-container">
+        <svg viewBox="0 0 24 24" width="24" height="24">
+          <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="currentColor" />
+        </svg>
+        <div class="title"><span class="title-text">Interview Teleprompter</span></div>
+      </div>
+      <div class="engine-selector">
+        <button id="btnSelectAssembly" class="engine-btn active"><span class="btn-label">Cloud</span></button>
+        <button id="btnSelectLocal" class="engine-btn"><span class="btn-label">Local</span></button>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="status-badge" id="appStatus">
+        <div class="status-dot"></div>
+        <span id="appStatusText">Initializing</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="toggle-group" id="paidToggleGroup">
+        <span class="toggle-label" id="labelPaid">PAID</span>
+        <label class="switch"><input type="checkbox" id="modelToggle"><span class="slider"></span></label>
+        <span class="toggle-label active" id="labelFree">FREE</span>
+      </div>
+      <button id="pauseBtn" class="btn-pause" title="Pause/Resume listening">
+        <span id="pauseBtnIcon">⏸️</span> <span id="pauseBtnText" class="btn-label">Pause</span>
+      </button>
+      <button id="btnCalibrate" title="Calibrate voice">🎤 <span class="btn-label">Calibrate</span></button>
+      <button id="btnClear" title="Clear history" style="color:var(--danger);">🗑️ <span class="btn-label">Clear</span></button>
+      <button id="btnSettings" title="Settings">⚙️ <span class="btn-label">Settings</span></button>
+    </div>
+  </header>
+
+  <main>
+    <div class="transcript-panel" id="transcriptContainer">
+      <div class="transcript-history" id="transcriptHistory"></div>
+      <div class="interim-text" id="interimText"></div>
+      <button id="btnInspectContext" class="btn-inspect" title="View raw AI context">🔍 Inspect Context</button>
+    </div>
+    <div class="teleprompter-panel">
+      <div class="loader" id="loader"></div>
+      <div class="teleprompter-content" id="teleprompterContent">
+        <span class="placeholder-text">Waiting for interviewer...</span>
+      </div>
+    </div>
+  </main>
+
+  <div class="calibration-overlay" id="calibrationOverlay">
+    <div class="calibration-card">
+      <h2>🎤 Voice Calibration (10 sec)</h2>
+      <p>Speak naturally for 10 seconds. This teaches the app to recognize <strong>your</strong> voice as the candidate.</p>
+      <div class="calibration-progress-container">
+        <div class="calibration-progress-bar" id="calibrationProgress"></div>
+      </div>
+      <div class="calibration-timer" id="calibrationTimer">10.0s</div>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.5rem;">Tip: You can also hold the button below while speaking to auto-calibrate.</p>
+      <button class="btn-save secondary" id="btnCancelCalibration" style="margin-top:1rem;">Cancel</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="hold-btn" id="holdBtn">
+      <svg viewBox="0 0 24 24" width="18" height="18">
+        <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="currentColor"/>
+      </svg>
+      <span id="holdBtnText">Hold to force Candidate</span>
+    </button>
+  </div>
+
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <h2>⚙️ Settings</h2>
+      <p class="section-label">🎙️ Speech-to-Text (AssemblyAI / Local)</p>
+      <div class="form-group">
+        <label for="assemblyApiKey">AssemblyAI API Key <span id="assemblyStatus"></span></label>
+        <input type="password" id="assemblyApiKey" placeholder="Your AssemblyAI key...">
+      </div>
+      <p class="section-label">🤖 AI Responses (OpenRouter)</p>
+      <div class="form-group">
+        <label for="apiKey">OpenRouter API Key <span id="openRouterStatus"></span></label>
+        <input type="password" id="apiKey" placeholder="sk-or-v1-...">
+      </div>
+      <p class="section-label">📋 Context</p>
+      <div class="form-group">
+        <label for="jobDescription">Job Description</label>
+        <textarea id="jobDescription" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="resumeText">Your Resume</label>
+        <textarea id="resumeText" rows="3"></textarea>
+      </div>
+      <p class="section-label">⚙️ Behavior</p>
+      <div class="form-group">
+        <label for="freeModel">Free Model Preference:</label>
+        <select id="freeModel" class="settings-select">
+          <option value="google/gemma-4-26b-a4b-it:free">Google: Gemma 4 26B A4B (free)</option>
+          <option value="google/gemma-4-31b-it:free">Google: Gemma 4 31B (free)</option>
+          <option value="google/gemini-2.0-flash-lite-001:free">Google: Gemini 2.0 Flash Lite (free)</option>
+          <option value="meta-llama/llama-3.3-70b-instruct:free">Meta: Llama 3.3 70B Instruct (free)</option>
+          <option value="meta-llama/llama-3.2-3b-instruct:free">Meta: Llama 3.2 3B Instruct (free)</option>
+          <option value="minimax/minimax-m2.5:free">MiniMax: MiniMax M2.5 (free)</option>
+          <option value="qwen/qwen3-next-80b-a3b-instruct:free">Qwen: Qwen3 Next 80B A3B Instruct (free)</option>
+          <option value="nousresearch/hermes-3-llama-3.1-405b:free">Nous: Hermes 3 405B Instruct (free)</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="aiDelay">AI trigger delay: <span id="delayDisplay" class="delay-value">2.0</span>s</label>
+        <input type="range" id="aiDelay" min="0.5" max="5.0" step="0.1" value="2.0">
+      </div>
+      <div class="form-group">
+        <label for="voiceThreshold">Voice match: <span id="thresholdDisplay" class="delay-value">0.60</span></label>
+        <input type="range" id="voiceThreshold" min="0.3" max="0.9" step="0.01" value="0.60">
+      </div>
+      <div class="form-group">
+        <label for="noiseFloor">Noise floor: <span id="noiseFloorDisplay" class="delay-value">12</span></label>
+        <input type="range" id="noiseFloor" min="0" max="50" step="1" value="12">
+      </div>
+      <button id="btnSaveSettings" class="btn-save">Save & Reconnect</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="inspectorModal">
+    <div class="modal" style="max-width: 800px;">
+      <h2>🔍 Raw AI Context</h2>
+      <pre id="inspectorContent" class="inspector-pre"></pre>
+      <button class="btn-save secondary" onclick="document.getElementById('inspectorModal').classList.remove('active')">Close</button>
+    </div>
+  </div>
+
+  <div class="start-overlay" id="startOverlay">
+    <div class="start-card">
+      <h1 id="startTitle">Interview Ready?</h1>
+      <button id="btnStartSession" class="btn-start">Start Session 🚀</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">History Cleared</div>
+
+  <script type="module" src="js/ui.js"></script>
+</body>
+</html>
