@@ -1,0 +1,19 @@
+# Netlify configuration for Interview Teleprompter
+
+[build]
+  publish = "."
+  command = "" # Statutory site, no build command needed
+
+[context.production]
+  # Settings for the production branch (Set this to 'master' in Netlify UI)
+  [context.production.environment]
+    NODE_ENV = "production"
+
+[context.dev]
+  # Specific settings for the 'dev' branch
+  [context.dev.environment]
+    NODE_ENV = "development"
+
+[context.branch-deploy]
+  # This context applies to all non-production branches (like 'dev')
+  # Netlify will automatically create a unique URL for these branches.
