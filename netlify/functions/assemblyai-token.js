@@ -4,6 +4,8 @@ exports.handler = async (event, context) => {
   }
 
   const apiKey = process.env.ASSEMBLYAI_API_KEY;
+  console.log('[Token] ASSEMBLYAI_API_KEY present:', !!apiKey);
+
   if (!apiKey) {
     return {
       statusCode: 500,

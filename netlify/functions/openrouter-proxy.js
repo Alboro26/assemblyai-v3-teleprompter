@@ -4,6 +4,8 @@ exports.handler = async (event, context) => {
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
+  console.log('[Proxy] OPENROUTER_API_KEY present:', !!apiKey);
+  
   if (!apiKey) {
     return {
       statusCode: 500,
