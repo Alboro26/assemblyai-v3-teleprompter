@@ -8,6 +8,7 @@ export class AIManager {
     this.isFreeMode = true;
     this.conversationHistory = [];
     this.isRunning = false;
+    this.responseCache = new Map();
   }
 
   setMode(isFree) {
@@ -18,19 +19,24 @@ export class AIManager {
     this.conversationHistory = history;
   }
 
-  async generateResponse(apiKey, jobDesc, resumeText) {
+  async generateResponse(jobDesc, resumeText) {
     if (this.isRunning) {
       console.warn('[AI] Request ignored: Generation already in progress.');
       return;
     }
 
-    if (!apiKey) {
-      this.callbacks.onError?.('Missing OpenRouter API Key');
-      return;
-    }
-
     this.callbacks.onStart?.();
     this.isRunning = true;
+
+    const recentHistory = this.conversationHistory.slice(-10);
+    const cacheKey = JSON.stringify(recentHistory);
+    
+    if (this.responseCache.has(cacheKey)) {
+        console.log('[AI] Serving response from cache.');
+        this.callbacks.onResponse?.(this.responseCache.get(cacheKey));
+        this.isRunning = false;
+        return;
+    }
 
     const messages = [
       {
@@ -45,7 +51,7 @@ Goal: Provide the CANDIDATE with a SHORT, TACTICAL response or talking point bas
 - Be direct.
 - Focus on the STAR method if applicable.`
       },
-      ...this.conversationHistory.slice(-10).map(m => ({
+      ...recentHistory.map(m => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: m.content
       }))
@@ -55,17 +61,18 @@ Goal: Provide the CANDIDATE with a SHORT, TACTICAL response or talking point bas
     const model = this.isFreeMode ? freeModel : 'google/gemini-2.0-flash-exp';
     
     try {
-      let data = await this.fetchOpenRouter(apiKey, model, messages);
+      let data = await this.fetchOpenRouter(model, messages);
       
       // Fallback if first model fails
       if (!data.choices?.[0]?.message?.content) {
         console.warn(`[AI] Primary model ${model} failed, trying fallback...`);
-        data = await this.fetchOpenRouter(apiKey, 'google/gemini-flash-1.5', messages);
+        data = await this.fetchOpenRouter('google/gemini-flash-1.5', messages);
       }
 
       let answer = data.choices?.[0]?.message?.content;
       if (answer) {
         answer = answer.replace(/[*_`#>]/g, '');
+        this.responseCache.set(cacheKey, answer);
         this.callbacks.onResponse?.(answer);
       } else {
         throw new Error('No content returned from AI');
@@ -78,14 +85,11 @@ Goal: Provide the CANDIDATE with a SHORT, TACTICAL response or talking point bas
     }
   }
 
-  async fetchOpenRouter(apiKey, model, messages) {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  async fetchOpenRouter(model, messages) {
+    const res = await fetch('/.netlify/functions/openrouter-proxy', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:8080',
-        'X-Title': 'Interview Teleprompter'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: model,

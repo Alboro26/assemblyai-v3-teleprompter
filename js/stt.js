@@ -19,22 +19,30 @@ export class STTManager {
   }
 
   // --- AssemblyAI (Cloud v3) ---
-  async connectAssembly(apiKey) {
+  async connectAssembly() {
     if (this.assemblyWS) {
       this.closeAssembly();
     }
     
-    // Build v3 URL with parameters
-    const params = new URLSearchParams({
-      token: apiKey,
-      speech_model: 'u3-rt-pro',
-      sample_rate: '16000',
-      speaker_labels: 'true',
-      punctuate: 'true',
-      format_text: 'true',
-      encoding: 'pcm_s16le'
-    });
-    
+    try {
+      this.callbacks.onStatus?.('Authenticating...', '');
+      const res = await fetch('/.netlify/functions/assemblyai-token', { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to fetch AssemblyAI token');
+      const data = await res.json();
+      const token = data.token;
+
+      // Build v3 URL with parameters
+      const params = new URLSearchParams({
+        token: token,
+        speech_model: 'u3-rt-pro',
+        sample_rate: '16000',
+        speaker_labels: 'true',
+        punctuate: 'true',
+        format_text: 'true',
+        // DEPENDENCY: This must match the output format of audio-worklet-processor.js
+        encoding: 'pcm_s16le'
+      });
+      
     const wsUrl = `wss://streaming.assemblyai.com/v3/ws?${params.toString()}`;
     this.assemblyWS = new WebSocket(wsUrl);
     this.assemblyWS.binaryType = 'arraybuffer';
@@ -58,7 +66,7 @@ export class STTManager {
     this.assemblyWS.onclose = (event) => {
       console.log('[STT] WebSocket Closed:', event.code);
       if (!event.wasClean && !this.isPaused) {
-        this.handleReconnection(apiKey);
+        this.handleReconnection();
       } else {
         this.callbacks.onStatus?.('Cloud Offline', 'warn');
       }
@@ -68,7 +76,11 @@ export class STTManager {
       console.error('[STT] WebSocket Error:', err);
       this.callbacks.onStatus?.('Connection Error', 'error');
     };
+  } catch (err) {
+      console.error('[STT] Token fetch error:', err);
+      this.callbacks.onStatus?.('STT Auth Failed', 'error');
   }
+}
 
   handleAssemblyMessage(msg) {
     // Reject if paused or if the message is not a 'Turn' event
@@ -109,11 +121,13 @@ export class STTManager {
     };
   }
 
-  handleReconnection(apiKey) {
+  handleReconnection() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       console.log(`[STT] Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-      setTimeout(() => this.connectAssembly(apiKey), 2000);
+      setTimeout(() => this.connectAssembly(), 2000);
+    } else {
+      this.callbacks.onStatus?.('Reconnection Failed', 'error');
     }
   }
 
@@ -122,6 +136,10 @@ export class STTManager {
       this.assemblyWS.onclose = null;
       this.assemblyWS.close();
       this.assemblyWS = null;
+    }
+    // Fix memory leak on multiple reconnects
+    if (this.audioEngine && this.audioEngine.workletNode) {
+      this.audioEngine.workletNode.port.onmessage = null;
     }
   }
 

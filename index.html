@@ -87,15 +87,9 @@
   <div class="modal-overlay" id="settingsModal">
     <div class="modal">
       <h2>⚙️ Settings</h2>
-      <p class="section-label">🎙️ Speech-to-Text (AssemblyAI / Local)</p>
-      <div class="form-group">
-        <label for="assemblyApiKey">AssemblyAI API Key <span id="assemblyStatus"></span></label>
-        <input type="password" id="assemblyApiKey" placeholder="Your AssemblyAI key...">
-      </div>
-      <p class="section-label">🤖 AI Responses (OpenRouter)</p>
-      <div class="form-group">
-        <label for="apiKey">OpenRouter API Key <span id="openRouterStatus"></span></label>
-        <input type="password" id="apiKey" placeholder="sk-or-v1-...">
+      <p class="section-label">🎙️ API Configuration</p>
+      <div class="form-group" style="color:var(--text-muted); font-size:0.9rem;">
+        API keys are now securely managed as environment variables via Netlify Dashboard.
       </div>
       <p class="section-label">📋 Context</p>
       <div class="form-group">

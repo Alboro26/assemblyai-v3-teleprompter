@@ -100,8 +100,7 @@ class AppController {
       this.state.aiTriggerDelay = parseFloat(localStorage.getItem('aiTriggerDelay')) || 2.0;
 
       // Sync UI
-      this._val('assemblyApiKey', localStorage.getItem('assemblyApiKey') || '');
-      this._val('apiKey', localStorage.getItem('openRouterApiKey') || '');
+
       this._val('jobDescription', localStorage.getItem('jobDescription') || '');
       this._val('resumeText', localStorage.getItem('resumeText') || '');
       
@@ -176,10 +175,8 @@ class AppController {
     this.syncEngineUI();
     
     if (this.state.isAssemblyMode) {
-      const key = localStorage.getItem('assemblyApiKey');
-      if (!key) return this.updateStatus('Missing Assembly Key', 'error');
       this.updateStatus('Connecting Cloud...', '');
-      this.stt.connectAssembly(key);
+      this.stt.connectAssembly();
     } else {
       this.updateStatus('Local Engine Ready', '');
       this.stt.initLocal();
@@ -276,7 +273,6 @@ class AppController {
       this.state.lastAiTriggerTime = now;
       this.ai.updateHistory(this.state.conversationHistory);
       this.ai.generateResponse(
-        localStorage.getItem('openRouterApiKey'),
         localStorage.getItem('jobDescription'),
         localStorage.getItem('resumeText')
       );
@@ -419,8 +415,6 @@ class AppController {
   saveSettings() {
     console.log("Saving settings...");
     const vals = {
-        'assemblyApiKey': 'assemblyApiKey',
-        'openRouterApiKey': 'apiKey',
         'jobDescription': 'jobDescription',
         'resumeText': 'resumeText',
         'aiTriggerDelay': 'aiDelay',

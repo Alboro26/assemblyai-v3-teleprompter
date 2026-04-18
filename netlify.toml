@@ -3,6 +3,7 @@
 [build]
   publish = "."
   command = "" # Statutory site, no build command needed
+  functions = "netlify/functions"
 
 [context.production]
   # Settings for the production branch (Set this to 'master' in Netlify UI)
