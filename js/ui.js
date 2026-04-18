@@ -258,12 +258,22 @@ class AppController {
     if (it) it.textContent = '';
 
     let isCandidate = this.state.isHolding;
-    if (!isCandidate && rawLabel) {
-        if (this.state.userVoiceSignature) {
-            isCandidate = this.state.matchConfidence > this.state.voiceThreshold;
+
+    if (!isCandidate) {
+        if (this.state.isAssemblyMode) {
+            // CLOUD MODE: Trust AssemblyAI Diarization completely. Speaker 'A' is Candidate.
+            // Ignored local userVoiceSignature because it often gets stuck at 0% confidence.
+            isCandidate = String(rawLabel).toUpperCase() === 'A';
         } else {
-            // Fallback: treat label "A" as candidate (adjust as needed after calibration)
-            isCandidate = (rawLabel === 'A');
+            // LOCAL MODE: Web Speech API has no diarization.
+            // Use voice matching ONLY if it actually detects volume (> 0).
+            if (this.state.userVoiceSignature && this.state.matchConfidence > 0) {
+                isCandidate = this.state.matchConfidence > this.state.voiceThreshold;
+            } else {
+                // If not using voice matching, default to interviewer 
+                // Candidate MUST hold the spacebar/button to speak safely.
+                isCandidate = false; 
+            }
         }
     }
     const role = isCandidate ? 'candidate' : 'interviewer';
