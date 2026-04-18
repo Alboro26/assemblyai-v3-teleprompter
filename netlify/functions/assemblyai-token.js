@@ -10,22 +10,22 @@ exports.handler = async (event, context) => {
   if (!apiKey) {
     return {
       statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: 'ASSEMBLYAI_API_KEY is not configured.' })
     };
   }
 
   return new Promise((resolve, reject) => {
-    // Verified V2 token endpoint (works for v3 websockets)
-    const postData = JSON.stringify({ expires_in: 3600 });
+    // V3 Token Endpoint - this returns proper JSON errors when keys are invalid
+    const queryParams = '?expires_in_seconds=600';
     
     const options = {
-      hostname: 'api.assemblyai.com',
-      path: '/v2/realtime/token',
-      method: 'POST',
+      hostname: 'streaming.assemblyai.com',
+      path: '/v3/token' + queryParams,
+      method: 'GET',
       headers: {
         'Authorization': apiKey,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
+        'Content-Type': 'application/json'
       }
     };
 
@@ -33,29 +33,35 @@ exports.handler = async (event, context) => {
       let body = '';
       res.on('data', (chunk) => body += chunk);
       res.on('end', () => {
-        // Log status for internal Netlify debugging
-        console.log(`[Token] AssemblyAI response status: ${res.statusCode}`);
-        
+        // We MUST return JSON, even if AssemblyAI returns raw text like "Not found"
+        // so the frontend doesn't crash on res.json()
+        let safeBody = body;
+        try {
+          JSON.parse(body); // Check if it's already JSON
+        } catch (e) {
+          // If AssemblyAI returned weird HTML/text, wrap it in JSON!
+          safeBody = JSON.stringify({ error: `AssemblyAI Error ${res.statusCode}`, raw_response: body.substring(0,200) });
+        }
+
         resolve({
-          statusCode: res.statusCode,
+          statusCode: res.statusCode === 404 && body === 'Not found' ? 401 : res.statusCode, // Coerce weird 404s to 401 Unauthorized
           headers: { 
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*' 
           },
-          body: body
+          body: safeBody
         });
       });
     });
 
     req.on('error', (e) => {
-      console.error('[Token] Network error:', e.message);
       resolve({
         statusCode: 500,
-        body: JSON.stringify({ error: 'Token request failed', detail: e.message })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Token request network failed', detail: e.message })
       });
     });
 
-    req.write(postData);
-    req.end();
+    req.end(); // GET req doesn't need write()
   });
 };
