@@ -38,23 +38,35 @@ export class AIManager {
         return;
     }
 
-    const messages = [
-      {
-        role: 'system',
-        content: `You are an expert interview coach. Context:
+    const systemPrompt = `You are an AI assistant providing real-time speaking lines for a job candidate in a live interview.
+
+Context:
 JOB DESCRIPTION: ${jobDesc}
 CANDIDATE RESUME: ${resumeText}
 
-SCENARIO: You are listening to a real-time interview.
-Goal: Provide the CANDIDATE with a SHORT, TACTICAL response or talking point based on the last question asked.
-- Keep it under 40 words.
-- Be direct.
-- Focus on the STAR method if applicable.`
+Your ONLY output should be the exact words the candidate should say aloud. 
+DO NOT include any additional text such as:
+- Introductions like "Response:" or "Here is a suggestion:"
+- Meta-commentary like "Since I don't have the resume..."
+- Explanations, notes, or context
+
+The output must be a single, concise, professional sentence or short paragraph that the candidate can read directly without any modification. If you lack context, provide a confident generic answer that demonstrates communication skills.`;
+
+    const lastMessage = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1].content : '';
+    
+    const messages = [
+      {
+        role: 'system',
+        content: systemPrompt
       },
-      ...recentHistory.map(m => ({
+      ...recentHistory.slice(0, -1).map(m => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: m.content
-      }))
+      })),
+      {
+        role: 'user',
+        content: `The interviewer just said: "${lastMessage}"\n\nProvide ONLY the candidate's spoken response. No other text.`
+      }
     ];
 
     const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemma-4-26b-a4b-it:free';
@@ -72,6 +84,13 @@ Goal: Provide the CANDIDATE with a SHORT, TACTICAL response or talking point bas
       let answer = data.choices?.[0]?.message?.content;
       if (answer) {
         answer = answer.replace(/[*_`#>]/g, '');
+        
+        // Remove common prefixes
+        answer = answer.replace(/^(Response:|Answer:|Suggestion:|Here's a suggestion:|Sure,|Certainly,|You could say:)\s*/i, '');
+        
+        // Trim whitespace and quotes
+        answer = answer.trim().replace(/^["']|["']$/g, '');
+
         this.responseCache.set(cacheKey, answer);
         this.callbacks.onResponse?.(answer);
       } else {
@@ -95,7 +114,7 @@ Goal: Provide the CANDIDATE with a SHORT, TACTICAL response or talking point bas
         model: model,
         messages: messages,
         temperature: 0.7,
-        max_tokens: 300
+        max_tokens: 150
       })
     });
     if (!res.ok) {
