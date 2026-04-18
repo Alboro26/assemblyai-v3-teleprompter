@@ -20,9 +20,12 @@ export class STTManager {
 
   // --- AssemblyAI (Cloud v3) ---
   async connectAssembly() {
-    if (this.assemblyWS) {
-      this.closeAssembly();
+    if (this.assemblyWS && this.assemblyWS.readyState === WebSocket.OPEN) {
+      console.warn('[STT] WebSocket already open');
+      return;
     }
+    this.isPaused = false;
+    this.closeAssembly();
     
     try {
       this.callbacks.onStatus?.('Authenticating...', '');
@@ -145,6 +148,7 @@ export class STTManager {
 
   // --- Browser (Local) ---
   initLocal() {
+    this.isPaused = false;
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
       this.callbacks.onStatus?.('Local STT Not Supported', 'error');
@@ -189,8 +193,12 @@ export class STTManager {
     }
   }
 
-  stopAll() {
+  stopStreaming() {
     this.isPaused = true;
+    this.stopAll();
+  }
+
+  stopAll() {
     this.closeAssembly();
     if (this.recognition) {
        this.recogActive = false;

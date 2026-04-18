@@ -170,6 +170,11 @@ class AppController {
   }
 
   setEngine(mode) {
+    // Stop any active STT before switching
+    if (this.stt) {
+        this.stt.stopAll();
+    }
+
     this.state.isAssemblyMode = (mode === 'assembly');
     localStorage.setItem('isAssemblyMode', this.state.isAssemblyMode);
     this.syncEngineUI();
@@ -252,10 +257,15 @@ class AppController {
     const it = document.getElementById('interimText');
     if (it) it.textContent = '';
 
-    const isCandidate = this.state.isHolding || (rawLabel ? 
-      ['1','A','0','candidate'].includes(String(rawLabel).toLowerCase()) : 
-      this.state.matchConfidence > this.state.voiceThreshold);
-    
+    let isCandidate = this.state.isHolding;
+    if (!isCandidate && rawLabel) {
+        if (this.state.userVoiceSignature) {
+            isCandidate = this.state.matchConfidence > this.state.voiceThreshold;
+        } else {
+            // Fallback: treat label "A" as candidate (adjust as needed after calibration)
+            isCandidate = (rawLabel === 'A');
+        }
+    }
     const role = isCandidate ? 'candidate' : 'interviewer';
     this.addTranscriptEntry(text, role, rawLabel);
     
@@ -280,7 +290,10 @@ class AppController {
   }
 
   addTranscriptEntry(text, role, rawLabel) {
-    this.state.conversationHistory.push({ role: role==='candidate'?'user':'interviewer', content: text });
+    this.state.conversationHistory.push({ 
+        role: role === 'candidate' ? 'user' : 'interviewer', 
+        content: text 
+    });
     const p = document.createElement('p');
     p.className = `transcript-entry ${role}`;
     

@@ -31,10 +31,34 @@ exports.handler = async (event, context) => {
       let body = '';
       res.on('data', (chunk) => body += chunk);
       res.on('end', () => {
+        let safeBody = body;
+        let isError = false;
+
+        // Try to ensure the response is valid JSON. If not safely wrap it.
+        try {
+            JSON.parse(body);
+        } catch (e) {
+            safeBody = JSON.stringify({ 
+                error: `OpenRouter returned invalid JSON`, 
+                detail: body.substring(0, 200) 
+            });
+            isError = true;
+        }
+
+        // If OpenRouter returns 404 (e.g. model not found), ensure we pass it correctly
+        if (res.statusCode >= 400 && !isError) {
+            // Already JSON, just pass it through
+        } else if (res.statusCode >= 400 && isError) {
+            // Handled by the catch block above
+        }
+
         resolve({
           statusCode: res.statusCode,
-          headers: { 'Content-Type': 'application/json' },
-          body: body
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          },
+          body: safeBody
         });
       });
     });

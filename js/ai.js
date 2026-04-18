@@ -98,7 +98,10 @@ Goal: Provide the CANDIDATE with a SHORT, TACTICAL response or talking point bas
         max_tokens: 300
       })
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errText}`);
+    }
     return await res.json();
   }
 }
