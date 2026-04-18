@@ -8,12 +8,22 @@
   # Settings for the production branch (Set this to 'master' in Netlify UI)
   [context.production.environment]
     NODE_ENV = "production"
+    SITE_STATUS = "live"
 
 [context.dev]
   # Specific settings for the 'dev' branch
   [context.dev.environment]
     NODE_ENV = "development"
+    SITE_STATUS = "testing"
+  
+  # Tell robots not to index our dev branch
+  [[context.dev.headers]]
+    for = "/*"
+    [context.dev.headers.values]
+      X-Robots-Tag = "noindex"
 
 [context.branch-deploy]
-  # This context applies to all non-production branches (like 'dev')
-  # Netlify will automatically create a unique URL for these branches.
+  # For ALL other non-production branches
+  [context.branch-deploy.environment]
+    NODE_ENV = "staging"
+    SITE_STATUS = "branch-preview"
