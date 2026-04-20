@@ -324,9 +324,11 @@ main {
   border-radius: 6px;
   margin-bottom: 2px;
   max-width: 95%;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.transcript-entry:hover { background: rgba(255, 255, 255, 0.05); }
+.transcript-entry:hover { background: rgba(255, 255, 255, 0.1); }
 
 .transcript-entry.interviewer {
   background: rgba(245, 158, 11, 0.05);

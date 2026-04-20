@@ -27,6 +27,7 @@ class AppController {
       calibrationComplete: localStorage.getItem('userVoiceSignature') !== null
     };
 
+    this.aiTimer = null; // For debouncing suggestions
     this.audio = new AudioEngine();
     this.stt = new STTManager({
       onStatus: (text, type) => this.updateStatus(text, type),
@@ -303,23 +304,7 @@ class AppController {
     this.addTranscriptEntry(text, role, rawLabel);
 
     if (!isCandidate) {
-      const now = Date.now();
-      const cooldown = this.state.isFreeMode ? 10000 : 3000;
-      const elapsed = now - this.state.lastAiTriggerTime;
-
-      if (elapsed < cooldown) {
-        console.log(`[UI] AI Throttled: ${Math.round((cooldown - elapsed) / 1000)}s remaining.`);
-        this.updateStatus(`Cooling Down (${Math.round((cooldown - elapsed) / 1000)}s)`, 'warn');
-        return;
-      }
-
-      this.state.lastAiTriggerTime = now;
-      this.ai.updateHistory(this.state.conversationHistory);
-      this.ai.generateResponse(
-        localStorage.getItem('jobDescription'),
-        localStorage.getItem('resumeText')
-      );
-    }
+        this.triggerDelayedAI();
     }
   }
 
@@ -349,12 +334,40 @@ class AppController {
   }
 
   addTranscriptEntry(text, role, rawLabel) {
+    const now = Date.now();
+    const history = this.state.conversationHistory;
+    const lastEntry = history.length > 0 ? history[history.length - 1] : null;
+    const aiRole = role === 'candidate' ? 'user' : 'interviewer';
+    const MERGE_THRESHOLD = 2000; // 2 seconds
+
+    // 1. Auto-Merge Logic
+    if (lastEntry && lastEntry.role === aiRole && (now - lastEntry.timestamp) < MERGE_THRESHOLD) {
+      console.log(`[UI] Auto-merging segment with last message.`);
+      lastEntry.content += ' ' + text;
+      lastEntry.timestamp = now;
+
+      // Update the DOM instead of creating new
+      const hist = document.getElementById('transcriptHistory');
+      if (hist && hist.lastElementChild) {
+        const idTag = rawLabel || (this.state.isAssemblyMode ? 'CLOUD_MISSING' : 'LOCAL');
+        hist.lastElementChild.textContent = `${lastEntry.content} [ID: ${idTag}]`;
+        hist.scrollTop = hist.scrollHeight;
+      }
+      return;
+    }
+
+    // 2. Standard Entry Path (New Block)
+    const entryIndex = history.length;
     this.state.conversationHistory.push({
-      role: role === 'candidate' ? 'user' : 'interviewer',
-      content: text
+      role: aiRole,
+      content: text,
+      timestamp: now
     });
+
     const p = document.createElement('p');
     p.className = `transcript-entry ${role}`;
+    p.dataset.index = entryIndex; // Store index for toggling
+    p.onclick = () => this.toggleEntryRole(entryIndex, p);
 
     const idTag = rawLabel || (this.state.isAssemblyMode ? 'CLOUD_MISSING' : 'LOCAL');
     p.textContent = `${text} [ID: ${idTag}]`;
@@ -364,6 +377,54 @@ class AppController {
       hist.appendChild(p);
       hist.scrollTop = hist.scrollHeight;
     }
+  }
+
+  toggleEntryRole(index, element) {
+    const entry = this.state.conversationHistory[index];
+    if (!entry) return;
+
+    // Toggle Role Logic
+    const oldRole = entry.role;
+    const newRole = oldRole === 'user' ? 'interviewer' : 'user';
+    const uiRole = newRole === 'user' ? 'candidate' : 'interviewer';
+
+    entry.role = newRole;
+    element.className = `transcript-entry ${uiRole}`;
+    console.log(`[UI] Toggled message ${index} identity to ${uiRole}`);
+
+    // Refire AI after correction (debounced)
+    this.triggerDelayedAI();
+  }
+
+  triggerDelayedAI() {
+    clearTimeout(this.aiTimer);
+    
+    // Check for cooldown before scheduling
+    const now = Date.now();
+    const cooldown = this.state.isFreeMode ? 10000 : 3000;
+    const elapsed = now - this.state.lastAiTriggerTime;
+
+    if (elapsed < cooldown) {
+        const remaining = Math.round((cooldown - elapsed) / 1000);
+        this.updateStatus(`Cooling Down (${remaining}s)`, 'warn');
+        return;
+    }
+
+    this.updateStatus('Waiting for input...', '');
+    this.aiTimer = setTimeout(() => {
+      const history = this.state.conversationHistory;
+      const last = history.length > 0 ? history[history.length - 1] : null;
+
+      // Only trigger if the CURRENT last message is an interviewer question
+      if (last && last.role === 'interviewer') {
+          this.state.lastAiTriggerTime = Date.now();
+          this.ai.updateHistory(this.state.conversationHistory);
+          this.ai.generateResponse(
+            localStorage.getItem('jobDescription'),
+            localStorage.getItem('resumeText')
+          );
+      }
+    }, 1000); // 1s debounce
   }
 
   updateStatus(text, type) {
