@@ -145,7 +145,7 @@ The output must be a single, concise, professional sentence or short paragraph t
     ];
 
     const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemma-3-27b-it:free';
-    const paidModel = localStorage.getItem('selectedPaidModel') || 'google/gemini-2.0-flash-001';
+    const paidModel = localStorage.getItem('selectedPaidModel') || 'openai/gpt-4o-mini';
     const model = this.isFreeMode ? freeModel : paidModel;
 
     try {
