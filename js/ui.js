@@ -370,7 +370,10 @@ class AppController {
     const appStatusText = document.getElementById('appStatusText');
     const appStatus = document.getElementById('appStatus');
     if (appStatusText) appStatusText.textContent = text;
-    if (appStatus) appStatus.classList.toggle('error', type === 'error');
+    if (appStatus) {
+      appStatus.classList.toggle('error', type === 'error');
+      appStatus.title = text; // Tooltip for full error
+    }
   }
 
   handleAIStart() {

@@ -117,7 +117,15 @@ header {
   border: 1px solid rgba(59, 130, 246, 0.2);
   transition: all 0.3s;
   min-width: 160px;
+  max-width: 25vw;
   justify-content: center;
+  overflow: hidden;
+}
+
+#appStatusText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-badge.candidate-mode { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); }
