@@ -35,6 +35,14 @@ export class AIManager {
         localStorage.setItem(CACHE_KEY, JSON.stringify(this.models));
         localStorage.setItem(CACHE_KEY + '_ts', Date.now().toString());
         console.log(`[AI] Synced ${this.models.length} models from OpenRouter.`);
+        
+        // Auto-correct if current selection is discontinued
+        const currentFree = localStorage.getItem('selectedFreeModel');
+        if (currentFree && !this.models.some(m => m.id === currentFree)) {
+            console.warn(`[AI] Selected model ${currentFree} no longer available. Resetting...`);
+            localStorage.removeItem('selectedFreeModel');
+        }
+        
         this.populateDropdowns();
       }
     } catch (e) {
@@ -136,7 +144,7 @@ The output must be a single, concise, professional sentence or short paragraph t
       }
     ];
 
-    const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+    const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemma-3-27b-it:free';
     const paidModel = localStorage.getItem('selectedPaidModel') || 'google/gemini-2.0-flash-001';
     const model = this.isFreeMode ? freeModel : paidModel;
 
@@ -145,14 +153,14 @@ The output must be a single, concise, professional sentence or short paragraph t
       try {
         data = await this.fetchOpenRouter(model, messages);
       } catch (err) {
-        console.warn(`[AI] Primary model ${model} error, trying fallback...`, err);
-        data = await this.fetchOpenRouter('google/gemini-flash-1.5', messages);
+        console.warn(`[AI] Primary model ${model} error, trying stable fallback...`, err);
+        data = await this.fetchOpenRouter('openrouter/free', messages);
       }
 
       // Secondary check for empty response
       if (!data.choices?.[0]?.message?.content) {
-        console.warn(`[AI] Primary model ${model} empty, trying fallback...`);
-        data = await this.fetchOpenRouter('google/gemini-flash-1.5', messages);
+        console.warn(`[AI] Primary model ${model} empty, trying stable fallback...`);
+        data = await this.fetchOpenRouter('openrouter/free', messages);
       }
 
       let answer = data.choices?.[0]?.message?.content;
