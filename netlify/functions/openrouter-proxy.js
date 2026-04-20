@@ -1,7 +1,7 @@
 const https = require('https');
 
 exports.handler = async (event, context) => {
-  if (event.httpMethod !== 'POST') {
+  if (event.httpMethod !== 'POST' && event.httpMethod !== 'GET') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
@@ -14,12 +14,13 @@ exports.handler = async (event, context) => {
   }
 
   return new Promise((resolve, reject) => {
-    const requestData = event.body;
+    const isGet = event.httpMethod === 'GET';
+    const requestData = isGet ? null : event.body;
     
     const options = {
       hostname: 'openrouter.ai',
-      path: '/api/v1/chat/completions',
-      method: 'POST',
+      path: isGet ? '/api/v1/models' : '/api/v1/chat/completions',
+      method: event.httpMethod,
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -70,7 +71,9 @@ exports.handler = async (event, context) => {
       });
     });
 
-    req.write(requestData);
+    if (requestData) {
+      req.write(requestData);
+    }
     req.end();
   });
 };

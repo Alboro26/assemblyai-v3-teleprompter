@@ -22,7 +22,7 @@ const server = http.createServer((req, res) => {
     }
     if (filePath.startsWith('./.netlify/functions/openrouter-proxy')) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ choices: [{ message: { content: 'Mock OpenRouter response' } }] }));
+        return res.end(JSON.stringify({ choices: [{ message: { content: ' Response: Yes, I am very comfortable with Docker and Kubernetes.' } }] }));
     }
 
     const extname = String(path.extname(filePath)).toLowerCase();

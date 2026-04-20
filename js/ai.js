@@ -9,6 +9,73 @@ export class AIManager {
     this.conversationHistory = [];
     this.isRunning = false;
     this.responseCache = new Map();
+    this.models = JSON.parse(localStorage.getItem('openrouter_models') || '[]');
+    
+    // Initial sync in background
+    this.syncModels();
+  }
+
+  async syncModels() {
+    const CACHE_KEY = 'openrouter_models';
+    const TTL = 24 * 60 * 60 * 1000;
+    const lastSync = parseInt(localStorage.getItem('openrouter_models_ts') || '0');
+    
+    if (Date.now() - lastSync < TTL && this.models.length > 0) {
+      this.populateDropdowns();
+      return;
+    }
+
+    try {
+      const res = await fetch('/.netlify/functions/openrouter-proxy', { method: 'GET' });
+      if (!res.ok) throw new Error('Model fetch failed');
+      const data = await res.json();
+      
+      if (data.data) {
+        this.models = data.data;
+        localStorage.setItem(CACHE_KEY, JSON.stringify(this.models));
+        localStorage.setItem(CACHE_KEY + '_ts', Date.now().toString());
+        console.log(`[AI] Synced ${this.models.length} models from OpenRouter.`);
+        this.populateDropdowns();
+      }
+    } catch (e) {
+      console.warn('[AI] Model sync failed, using defaults.', e);
+    }
+  }
+
+  populateDropdowns() {
+    const freeSel = document.getElementById('freeModel');
+    const paidSel = document.getElementById('paidModel');
+    if (!freeSel || !paidSel) return;
+
+    const currentFree = localStorage.getItem('selectedFreeModel');
+    const currentPaid = localStorage.getItem('selectedPaidModel');
+
+    // Clear and repopulate
+    freeSel.innerHTML = '';
+    paidSel.innerHTML = '';
+
+    this.models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name || m.id;
+        
+        if (this.isModelFree(m)) {
+            freeSel.appendChild(opt);
+        } else {
+            paidSel.appendChild(opt);
+        }
+    });
+
+    // Restore selections
+    if (currentFree) freeSel.value = currentFree;
+    if (currentPaid) paidSel.value = currentPaid;
+  }
+
+  isModelFree(m) {
+    if (m.id.toLowerCase().includes('free')) return true;
+    const p = m.pricing;
+    if (p && parseFloat(p.prompt) === 0 && parseFloat(p.completion) === 0) return true;
+    return false;
   }
 
   setMode(isFree) {
@@ -69,27 +136,36 @@ The output must be a single, concise, professional sentence or short paragraph t
       }
     ];
 
-    const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemma-4-26b-a4b-it:free';
-    const model = this.isFreeMode ? freeModel : 'google/gemini-2.0-flash-exp';
+    const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+    const paidModel = localStorage.getItem('selectedPaidModel') || 'google/gemini-2.0-flash-001';
+    const model = this.isFreeMode ? freeModel : paidModel;
     
     try {
-      let data = await this.fetchOpenRouter(model, messages);
+      let data;
+      try {
+        data = await this.fetchOpenRouter(model, messages);
+      } catch (err) {
+        console.warn(`[AI] Primary model ${model} error, trying fallback...`, err);
+        data = await this.fetchOpenRouter('google/gemini-flash-1.5', messages);
+      }
       
-      // Fallback if first model fails
+      // Secondary check for empty response
       if (!data.choices?.[0]?.message?.content) {
-        console.warn(`[AI] Primary model ${model} failed, trying fallback...`);
+        console.warn(`[AI] Primary model ${model} empty, trying fallback...`);
         data = await this.fetchOpenRouter('google/gemini-flash-1.5', messages);
       }
 
       let answer = data.choices?.[0]?.message?.content;
       if (answer) {
-        answer = answer.replace(/[*_`#>]/g, '');
+        // 1. Initial cleanup of markdown/noise
+        answer = answer.replace(/[*_`#>]/g, '').trim();
         
-        // Remove common prefixes
-        answer = answer.replace(/^(Response:|Answer:|Suggestion:|Here's a suggestion:|Sure,|Certainly,|You could say:)\s*/i, '');
+        // 2. Remove common prefixes (now that we've trimmed)
+        const prefixRegex = /^(Response:|Answer:|Suggestion:|Here's a suggestion:|Sure,|Certainly,|You could say:|Candidate:)\s*/i;
+        answer = answer.replace(prefixRegex, '').trim();
         
-        // Trim whitespace and quotes
-        answer = answer.trim().replace(/^["']|["']$/g, '');
+        // 3. Final trim and quote removal
+        answer = answer.replace(/^["']|["']$/g, '').trim();
 
         this.responseCache.set(cacheKey, answer);
         this.callbacks.onResponse?.(answer);

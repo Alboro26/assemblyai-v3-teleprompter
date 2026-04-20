@@ -20,7 +20,8 @@ class AppController {
       conversationHistory: [],
       userVoiceSignature: JSON.parse(localStorage.getItem('userVoiceSignature') || 'null'),
       matchConfidence: 0,
-      selectedFreeModel: localStorage.getItem('selectedFreeModel') || 'google/gemma-4-26b-a4b-it:free',
+      selectedFreeModel: localStorage.getItem('selectedFreeModel') || 'google/gemini-2.0-flash-lite-preview-02-05:free',
+      selectedPaidModel: localStorage.getItem('selectedPaidModel') || 'google/gemini-2.0-flash-001',
       lastAiTriggerTime: 0
     };
 
@@ -100,7 +101,6 @@ class AppController {
       this.state.aiTriggerDelay = parseFloat(localStorage.getItem('aiTriggerDelay')) || 2.0;
 
       // Sync UI
-
       this._val('jobDescription', localStorage.getItem('jobDescription') || '');
       this._val('resumeText', localStorage.getItem('resumeText') || '');
       
@@ -118,6 +118,7 @@ class AppController {
       this._text('noiseFloorDisplay', this.state.noiseFloorThreshold);
       
       this._val('freeModel', this.state.selectedFreeModel);
+      this._val('paidModel', this.state.selectedPaidModel);
 
       this.syncEngineUI();
     } catch (e) {
@@ -443,7 +444,8 @@ class AppController {
         'aiTriggerDelay': 'aiDelay',
         'voiceThreshold': 'voiceThreshold',
         'noiseFloorThreshold': 'noiseFloor',
-        'selectedFreeModel': 'freeModel'
+        'selectedFreeModel': 'freeModel',
+        'selectedPaidModel': 'paidModel'
     };
     
     for (const [storeKey, elId] of Object.entries(vals)) {
@@ -455,6 +457,7 @@ class AppController {
     this.state.voiceThreshold = parseFloat(localStorage.getItem('voiceThreshold'));
     this.state.noiseFloorThreshold = parseInt(localStorage.getItem('noiseFloorThreshold'));
     this.state.selectedFreeModel = localStorage.getItem('selectedFreeModel');
+    this.state.selectedPaidModel = localStorage.getItem('selectedPaidModel');
     
     this.toggleSettings();
     this.setEngine(this.state.isAssemblyMode ? 'assembly' : 'local');
