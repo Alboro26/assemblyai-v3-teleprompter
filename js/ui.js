@@ -336,22 +336,35 @@ class AppController {
   addTranscriptEntry(text, role, rawLabel) {
     const now = Date.now();
     const history = this.state.conversationHistory;
-    const lastEntry = history.length > 0 ? history[history.length - 1] : null;
+    
+    let lastHumanEntry = null;
+    for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role !== 'assistant') {
+            lastHumanEntry = history[i];
+            break;
+        }
+    }
+
     const aiRole = role === 'candidate' ? 'user' : 'interviewer';
-    const MERGE_THRESHOLD = 2000; // 2 seconds
+    const MERGE_THRESHOLD = 5000; // 5 seconds (increased to handle network/processing delays)
 
     // 1. Auto-Merge Logic
-    if (lastEntry && lastEntry.role === aiRole && (now - lastEntry.timestamp) < MERGE_THRESHOLD) {
+    if (lastHumanEntry && lastHumanEntry.role === aiRole && (now - (lastHumanEntry.timestamp || 0)) < MERGE_THRESHOLD) {
       console.log(`[UI] Auto-merging segment with last message.`);
-      lastEntry.content += ' ' + text;
-      lastEntry.timestamp = now;
+      lastHumanEntry.content += ' ' + text;
+      lastHumanEntry.timestamp = now; // Refresh timestamp
 
       // Update the DOM instead of creating new
       const hist = document.getElementById('transcriptHistory');
       if (hist && hist.lastElementChild) {
         const idTag = rawLabel || (this.state.isAssemblyMode ? 'CLOUD_MISSING' : 'LOCAL');
-        hist.lastElementChild.textContent = `${lastEntry.content} [ID: ${idTag}]`;
+        hist.lastElementChild.textContent = `${lastHumanEntry.content} [ID: ${idTag}]`;
         hist.scrollTop = hist.scrollHeight;
+      }
+      
+      // Wipe trailing assistant messages so the context remains contiguous for the final AI trigger
+      while (history.length > 0 && history[history.length - 1].role === 'assistant') {
+          history.pop();
       }
       return;
     }
