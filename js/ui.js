@@ -22,7 +22,9 @@ class AppController {
       matchConfidence: 0,
       selectedFreeModel: localStorage.getItem('selectedFreeModel') || 'google/gemini-2.0-flash-lite-preview-02-05:free',
       selectedPaidModel: localStorage.getItem('selectedPaidModel') || 'google/gemini-2.0-flash-001',
-      lastAiTriggerTime: 0
+      lastAiTriggerTime: 0,
+      speakerMapping: { candidate: null, interviewer: null },
+      calibrationComplete: localStorage.getItem('userVoiceSignature') !== null
     };
 
     this.audio = new AudioEngine();
@@ -49,7 +51,7 @@ class AppController {
       this._bind('btnSelectAssembly', 'onclick', () => this.setEngine('assembly'));
       this._bind('btnSelectLocal', 'onclick', () => this.setEngine('local'));
       this._bind('modelToggle', 'onchange', () => this.toggleModelMode());
-      
+
       // Actions
       this._bind('btnSettings', 'onclick', () => this.toggleSettings());
       this._bind('btnClear', 'onclick', () => this.clearHistory());
@@ -58,7 +60,7 @@ class AppController {
       this._bind('btnInspectContext', 'onclick', () => this.showInspector());
       this._bind('btnSaveSettings', 'onclick', () => this.saveSettings());
       this._bind('btnCancelCalibration', 'onclick', () => this.stopCalibration());
-      
+
       // Hold Button
       const holdBtn = document.getElementById('holdBtn');
       if (holdBtn) {
@@ -103,11 +105,11 @@ class AppController {
       // Sync UI
       this._val('jobDescription', localStorage.getItem('jobDescription') || '');
       this._val('resumeText', localStorage.getItem('resumeText') || '');
-      
+
       const mToggle = document.getElementById('modelToggle');
       if (mToggle) {
-          mToggle.checked = this.state.isFreeMode;
-          this.updateModelToggleUI();
+        mToggle.checked = this.state.isFreeMode;
+        this.updateModelToggleUI();
       }
 
       this._val('aiDelay', this.state.aiTriggerDelay);
@@ -116,9 +118,15 @@ class AppController {
       this._text('thresholdDisplay', this.state.voiceThreshold.toFixed(2));
       this._val('noiseFloor', this.state.noiseFloorThreshold);
       this._text('noiseFloorDisplay', this.state.noiseFloorThreshold);
-      
+
       this._val('freeModel', this.state.selectedFreeModel);
       this._val('paidModel', this.state.selectedPaidModel);
+      
+      const savedOverride = localStorage.getItem('candidateLabelOverride') || 'auto';
+      this._val('candidateLabelOverride', savedOverride);
+      if (savedOverride !== 'auto') {
+          this.state.speakerMapping.candidate = savedOverride;
+      }
 
       this.syncEngineUI();
     } catch (e) {
@@ -148,38 +156,38 @@ class AppController {
 
   async startSession() {
     console.log("Starting session...");
-    
+
     // Immediate UI feedback: hide overlay first to prevent hangs from blocking the user
     const overlay = document.getElementById('startOverlay');
     if (overlay) overlay.classList.add('hidden');
 
     const ok = await this.audio.init();
     if (!ok) {
-        if (overlay) overlay.classList.remove('hidden'); // Show again if we really can't get mic
-        return alert('Microphone access is required for the teleprompter to work.');
+      if (overlay) overlay.classList.remove('hidden'); // Show again if we really can't get mic
+      return alert('Microphone access is required for the teleprompter to work.');
     }
-    
+
     // Explicitly update engine with the new audio context and resume
     this.stt.setAudioEngine(this.audio);
     if (this.audio.audioCtx) {
-        this.audio.audioCtx.resume().then(() => {
-            console.log("Audio pipeline active.");
-            this.setEngine(this.state.isAssemblyMode ? 'assembly' : 'local');
-            this.startAnalysisLoop();
-        });
+      this.audio.audioCtx.resume().then(() => {
+        console.log("Audio pipeline active.");
+        this.setEngine(this.state.isAssemblyMode ? 'assembly' : 'local');
+        this.startAnalysisLoop();
+      });
     }
   }
 
   setEngine(mode) {
     // Stop any active STT before switching
     if (this.stt) {
-        this.stt.stopAll();
+      this.stt.stopAll();
     }
 
     this.state.isAssemblyMode = (mode === 'assembly');
     localStorage.setItem('isAssemblyMode', this.state.isAssemblyMode);
     this.syncEngineUI();
-    
+
     if (this.state.isAssemblyMode) {
       this.updateStatus('Connecting Cloud...', '');
       this.stt.connectAssembly();
@@ -192,14 +200,14 @@ class AppController {
   togglePause() {
     this.state.isPaused = !this.state.isPaused;
     this.stt.isPaused = this.state.isPaused;
-    
+
     const pb = document.getElementById('pauseBtn');
     if (pb) {
-        pb.classList.toggle('active', this.state.isPaused);
-        this._text('pauseBtnIcon', this.state.isPaused ? '▶️' : '⏸️');
-        this._text('pauseBtnText', this.state.isPaused ? 'Resume' : 'Pause');
+      pb.classList.toggle('active', this.state.isPaused);
+      this._text('pauseBtnIcon', this.state.isPaused ? '▶️' : '⏸️');
+      this._text('pauseBtnText', this.state.isPaused ? 'Resume' : 'Pause');
     }
-    
+
     if (this.state.isPaused) {
       this.updateStatus('Paused', '');
       this.stt.stopStreaming();
@@ -211,8 +219,8 @@ class AppController {
   startAnalysisLoop() {
     const loop = () => {
       if (this.state.isPaused || this.state.isCalibrating) {
-          requestAnimationFrame(loop);
-          return;
+        requestAnimationFrame(loop);
+        return;
       }
 
       const rms = this.audio.getRMS();
@@ -239,11 +247,11 @@ class AppController {
     const isCandidate = this.state.isHolding || this.state.matchConfidence > this.state.voiceThreshold;
     const appStatus = document.getElementById('appStatus');
     const appStatusText = document.getElementById('appStatusText');
-    
+
     if (appStatus) appStatus.classList.toggle('candidate-mode', isCandidate);
     if (appStatusText && appStatus && !appStatus.classList.contains('generating') && !appStatus.classList.contains('error')) {
-      appStatusText.textContent = isCandidate ? 
-        `Candidate (${Math.round(this.state.matchConfidence * 100)}%)` : 
+      appStatusText.textContent = isCandidate ?
+        `Candidate (${Math.round(this.state.matchConfidence * 100)}%)` :
         (this.state.userVoiceSignature ? `Interviewer (${Math.round(this.state.matchConfidence * 100)}%)` : 'Listening...');
     }
   }
@@ -257,37 +265,51 @@ class AppController {
     console.log("Final STT detected:", text, rawLabel);
     const it = document.getElementById('interimText');
     if (it) it.textContent = '';
+    
+    // Help calibration identify the correct label
+    if (this.state.isCalibrating && rawLabel) {
+        this.state.calibrationLabels.push(rawLabel);
+    }
 
     let isCandidate = this.state.isHolding;
-
+    
     if (!isCandidate) {
-        if (this.state.isAssemblyMode) {
-            // CLOUD MODE: Trust AssemblyAI Diarization completely. Speaker 'A' is Candidate.
-            // Ignored local userVoiceSignature because it often gets stuck at 0% confidence.
-            isCandidate = String(rawLabel).toUpperCase() === 'A';
+      if (this.state.isAssemblyMode) {
+        // Use smart identity detection
+        isCandidate = this.determineSpeakerIdentity(rawLabel);
+      } else {
+        // LOCAL MODE: Use voice matching exclusively
+        if (this.state.userVoiceSignature && this.state.matchConfidence > 0) {
+          isCandidate = this.state.matchConfidence > this.state.voiceThreshold;
         } else {
-            // LOCAL MODE: Web Speech API has no diarization.
-            // Use voice matching ONLY if it actually detects volume (> 0).
-            if (this.state.userVoiceSignature && this.state.matchConfidence > 0) {
-                isCandidate = this.state.matchConfidence > this.state.voiceThreshold;
-            } else {
-                // If not using voice matching, default to interviewer 
-                // Candidate MUST hold the spacebar/button to speak safely.
-                isCandidate = false; 
-            }
+          isCandidate = false;
+        }
+      }
+    }
+    
+    const role = isCandidate ? 'candidate' : 'interviewer';
+    
+    // Auto-learn the mapping for the first time if not yet assigned
+    if (this.state.isAssemblyMode && rawLabel) {
+        if (!this.state.speakerMapping.candidate && isCandidate) {
+            this.state.speakerMapping.candidate = rawLabel;
+            console.log(`[UI] Learned candidate label: ${rawLabel}`);
+        } else if (!this.state.speakerMapping.interviewer && !isCandidate) {
+            this.state.speakerMapping.interviewer = rawLabel;
+            console.log(`[UI] Learned interviewer label: ${rawLabel}`);
         }
     }
-    const role = isCandidate ? 'candidate' : 'interviewer';
+
     this.addTranscriptEntry(text, role, rawLabel);
-    
+
     if (!isCandidate) {
       const now = Date.now();
       const cooldown = this.state.isFreeMode ? 10000 : 3000;
       const elapsed = now - this.state.lastAiTriggerTime;
 
       if (elapsed < cooldown) {
-        console.log(`[UI] AI Throttled: ${Math.round((cooldown - elapsed)/1000)}s remaining.`);
-        this.updateStatus(`Cooling Down (${Math.round((cooldown - elapsed)/1000)}s)`, 'warn');
+        console.log(`[UI] AI Throttled: ${Math.round((cooldown - elapsed) / 1000)}s remaining.`);
+        this.updateStatus(`Cooling Down (${Math.round((cooldown - elapsed) / 1000)}s)`, 'warn');
         return;
       }
 
@@ -298,23 +320,49 @@ class AppController {
         localStorage.getItem('resumeText')
       );
     }
+    }
+  }
+
+  determineSpeakerIdentity(rawLabel) {
+    if (!rawLabel) return false;
+
+    // 1. Check manual override/mapping first
+    if (this.state.speakerMapping.candidate) {
+      return rawLabel === this.state.speakerMapping.candidate;
+    }
+
+    // 2. Use voice signature if available and calibration is done
+    if (this.state.userVoiceSignature && this.state.calibrationComplete) {
+      const isVoiceMatch = this.state.matchConfidence > this.state.voiceThreshold;
+      if (isVoiceMatch) {
+          // Opportunistically learn this label as candidate
+          this.state.speakerMapping.candidate = rawLabel;
+          console.log(`[UI] Auto-assigned candidate label from voice match: ${rawLabel}`);
+          return true;
+      }
+    }
+
+    // 3. Fallback: If we haven't identified the candidate yet, 
+    // we assume new speakers are interviewers until proven otherwise.
+    // This prioritizes triggering the AI.
+    return false;
   }
 
   addTranscriptEntry(text, role, rawLabel) {
-    this.state.conversationHistory.push({ 
-        role: role === 'candidate' ? 'user' : 'interviewer', 
-        content: text 
+    this.state.conversationHistory.push({
+      role: role === 'candidate' ? 'user' : 'interviewer',
+      content: text
     });
     const p = document.createElement('p');
     p.className = `transcript-entry ${role}`;
-    
+
     const idTag = rawLabel || (this.state.isAssemblyMode ? 'CLOUD_MISSING' : 'LOCAL');
     p.textContent = `${text} [ID: ${idTag}]`;
-    
+
     const hist = document.getElementById('transcriptHistory');
     if (hist) {
-        hist.appendChild(p);
-        hist.scrollTop = hist.scrollHeight;
+      hist.appendChild(p);
+      hist.scrollTop = hist.scrollHeight;
     }
   }
 
@@ -322,7 +370,7 @@ class AppController {
     const appStatusText = document.getElementById('appStatusText');
     const appStatus = document.getElementById('appStatus');
     if (appStatusText) appStatusText.textContent = text;
-    if (appStatus) appStatus.classList.toggle('error', type==='error');
+    if (appStatus) appStatus.classList.toggle('error', type === 'error');
   }
 
   handleAIStart() {
@@ -336,7 +384,7 @@ class AppController {
     const el = document.getElementById('teleprompterContent');
     if (el) el.innerHTML = text;
     this.state.conversationHistory.push({ role: 'assistant', content: text });
-    
+
     const appStatus = document.getElementById('appStatus');
     const loader = document.getElementById('loader');
     if (appStatus) appStatus.classList.remove('generating');
@@ -360,16 +408,17 @@ class AppController {
     this.state.isCalibrating = true;
     const overlay = document.getElementById('calibrationOverlay');
     if (overlay) overlay.classList.add('active');
-    
+
     const bar = document.getElementById('calibrationProgress');
     const timer = document.getElementById('calibrationTimer');
     const samples = [];
+    this.state.calibrationLabels = [];
     const DURATION = 10000;
     const start = Date.now();
 
     const iv = setInterval(() => {
       if (!this.state.isCalibrating) { clearInterval(iv); return; }
-      
+
       const elapsed = Date.now() - start;
       const remaining = Math.max(0, (DURATION - elapsed) / 1000);
       if (timer) timer.textContent = remaining.toFixed(1) + 's';
@@ -409,7 +458,19 @@ class AppController {
       signature: avgSpectral.map(v => v / samples.length),
       pitch: pCount > 0 ? avgPitch / pCount : null
     };
-    
+
+    // Lock in the speaker label seen during calibration
+    if (this.state.calibrationLabels.length > 0) {
+        // Find most frequent label
+        const counts = {};
+        this.state.calibrationLabels.forEach(l => counts[l] = (counts[l] || 0) + 1);
+        const bestLabel = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+
+        this.state.speakerMapping.candidate = bestLabel;
+        console.log(`[UI] Calibration locked candidate label: ${bestLabel}`);
+    }
+
+    this.state.calibrationComplete = true;
     localStorage.setItem('userVoiceSignature', JSON.stringify(this.state.userVoiceSignature));
     alert('Calibration successful! Diarization is now tuned to your voice.');
   }
@@ -419,10 +480,10 @@ class AppController {
     const sm = document.getElementById('settingsModal');
     if (sm) sm.classList.toggle('active');
   }
-  toggleModelMode() { 
+  toggleModelMode() {
     const mt = document.getElementById('modelToggle');
     if (!mt) return;
-    this.state.isFreeMode = mt.checked; 
+    this.state.isFreeMode = mt.checked;
     localStorage.setItem('isFreeMode', this.state.isFreeMode);
     this.ai.setMode(this.state.isFreeMode);
     this.updateModelToggleUI();
@@ -435,22 +496,23 @@ class AppController {
     if (tc) tc.innerHTML = '<span class="placeholder-text">Waiting for interviewer...</span>';
   }
   setHolding(val) { this.state.isHolding = val; }
-  
+
   saveSettings() {
     console.log("Saving settings...");
     const vals = {
-        'jobDescription': 'jobDescription',
-        'resumeText': 'resumeText',
-        'aiTriggerDelay': 'aiDelay',
-        'voiceThreshold': 'voiceThreshold',
-        'noiseFloorThreshold': 'noiseFloor',
-        'selectedFreeModel': 'freeModel',
-        'selectedPaidModel': 'paidModel'
+      'jobDescription': 'jobDescription',
+      'resumeText': 'resumeText',
+      'aiTriggerDelay': 'aiDelay',
+      'voiceThreshold': 'voiceThreshold',
+      'noiseFloorThreshold': 'noiseFloor',
+      'selectedFreeModel': 'freeModel',
+      'selectedPaidModel': 'paidModel',
+      'candidateLabelOverride': 'candidateLabelOverride'
     };
-    
+
     for (const [storeKey, elId] of Object.entries(vals)) {
-        const el = document.getElementById(elId);
-        if (el) localStorage.setItem(storeKey, el.value);
+      const el = document.getElementById(elId);
+      if (el) localStorage.setItem(storeKey, el.value);
     }
 
     this.state.aiTriggerDelay = parseFloat(localStorage.getItem('aiTriggerDelay'));
@@ -459,15 +521,22 @@ class AppController {
     this.state.selectedFreeModel = localStorage.getItem('selectedFreeModel');
     this.state.selectedPaidModel = localStorage.getItem('selectedPaidModel');
     
+    const override = localStorage.getItem('candidateLabelOverride');
+    if (override && override !== 'auto') {
+        this.state.speakerMapping.candidate = override;
+    } else {
+        this.state.speakerMapping.candidate = null; // Re-learn if set to auto
+    }
+
     this.toggleSettings();
     this.setEngine(this.state.isAssemblyMode ? 'assembly' : 'local');
-    
+
     // Show toast
     const toast = document.getElementById('toast');
     if (toast) {
-        toast.textContent = "Settings Saved";
-        toast.classList.add('show');
-        setTimeout(() => toast.classList.remove('show'), 2000);
+      toast.textContent = "Settings Saved";
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
     }
   }
 
@@ -483,7 +552,7 @@ class AppController {
 // Boot the app
 window.addEventListener('DOMContentLoaded', () => {
   window.app = new AppController();
-  
+
   // Register Service Worker for PWA
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

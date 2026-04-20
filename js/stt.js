@@ -26,7 +26,7 @@ export class STTManager {
     }
     this.isPaused = false;
     this.closeAssembly();
-    
+
     try {
       this.callbacks.onStatus?.('Authenticating...', '');
       const res = await fetch('/.netlify/functions/assemblyai-token', { method: 'POST' });
@@ -45,45 +45,45 @@ export class STTManager {
         // DEPENDENCY: This must match the output format of audio-worklet-processor.js
         encoding: 'pcm_s16le'
       });
-      
-    const wsUrl = `wss://streaming.assemblyai.com/v3/ws?${params.toString()}`;
-    this.assemblyWS = new WebSocket(wsUrl);
-    this.assemblyWS.binaryType = 'arraybuffer';
-    
-    this.assemblyWS.onopen = () => {
-      console.log('[STT] Cloud v3 Connected');
-      this.reconnectAttempts = 0;
-      this.callbacks.onStatus?.('Listening (Cloud)', 'ok');
-      this.startWorkletStreaming();
-    };
 
-    this.assemblyWS.onmessage = (e) => {
-      const msg = JSON.parse(e.data);
-      if (msg.error) {
-        console.error('[STT] AssemblyAI Error:', msg.error);
-        this.callbacks.onStatus?.('Cloud API Error', 'error');
-      }
-      this.handleAssemblyMessage(msg);
-    };
+      const wsUrl = `wss://streaming.assemblyai.com/v3/ws?${params.toString()}`;
+      this.assemblyWS = new WebSocket(wsUrl);
+      this.assemblyWS.binaryType = 'arraybuffer';
 
-    this.assemblyWS.onclose = (event) => {
-      console.log('[STT] WebSocket Closed:', event.code);
-      if (!event.wasClean && !this.isPaused) {
-        this.handleReconnection();
-      } else {
-        this.callbacks.onStatus?.('Cloud Offline', 'warn');
-      }
-    };
+      this.assemblyWS.onopen = () => {
+        console.log('[STT] Cloud v3 Connected');
+        this.reconnectAttempts = 0;
+        this.callbacks.onStatus?.('Listening (Cloud)', 'ok');
+        this.startWorkletStreaming();
+      };
 
-    this.assemblyWS.onerror = (err) => {
-      console.error('[STT] WebSocket Error:', err);
-      this.callbacks.onStatus?.('Connection Error', 'error');
-    };
-  } catch (err) {
+      this.assemblyWS.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.error) {
+          console.error('[STT] AssemblyAI Error:', msg.error);
+          this.callbacks.onStatus?.('Cloud API Error', 'error');
+        }
+        this.handleAssemblyMessage(msg);
+      };
+
+      this.assemblyWS.onclose = (event) => {
+        console.log('[STT] WebSocket Closed:', event.code);
+        if (!event.wasClean && !this.isPaused) {
+          this.handleReconnection();
+        } else {
+          this.callbacks.onStatus?.('Cloud Offline', 'warn');
+        }
+      };
+
+      this.assemblyWS.onerror = (err) => {
+        console.error('[STT] WebSocket Error:', err);
+        this.callbacks.onStatus?.('Connection Error', 'error');
+      };
+    } catch (err) {
       console.error('[STT] Token fetch error:', err);
       this.callbacks.onStatus?.('STT Auth Failed', 'error');
+    }
   }
-}
 
   handleAssemblyMessage(msg) {
     // Reject if paused or if the message is not a 'Turn' event
@@ -93,7 +93,7 @@ export class STTManager {
     // Extract the new v3 payload structure
     const transcript = msg.transcript || "";
     const isFinal = msg.end_of_turn === true;
-    const rawLabel = msg.speaker_label;
+    const rawLabel = msg.speaker; // v3 uses 'speaker' instead of 'speaker_label'
 
     // Log to verify data flow (check browser console after deployment)
     console.log(`[STT] v3 Turn received: end_of_turn=${isFinal}, text="${transcript}", speaker=${rawLabel}`);
@@ -118,7 +118,7 @@ export class STTManager {
     // Handle incoming binary PCM from the Worklet
     this.audioEngine.workletNode.port.onmessage = (event) => {
       if (this.isPaused || !this.assemblyWS || this.assemblyWS.readyState !== WebSocket.OPEN) return;
-      
+
       // The event.data is the raw Int16 ArrayBuffer from the worklet
       this.assemblyWS.send(event.data);
     };
@@ -154,21 +154,21 @@ export class STTManager {
       this.callbacks.onStatus?.('Local STT Not Supported', 'error');
       return false;
     }
-    
+
     this.recognition = new SpeechRec();
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
-    
-    this.recognition.onstart = () => { 
-      this.recogActive = true; 
+
+    this.recognition.onstart = () => {
+      this.recogActive = true;
       this.callbacks.onStatus?.('Listening (Local)', 'ok');
     };
 
-    this.recognition.onend = () => { 
-      this.recogActive = false; 
-      if (!this.isPaused) this.safeRestartLocal(); 
+    this.recognition.onend = () => {
+      this.recogActive = false;
+      if (!this.isPaused) this.safeRestartLocal();
     };
-    
+
     this.recognition.onresult = (e) => {
       if (this.isPaused) return;
       let interim = '';
@@ -182,14 +182,14 @@ export class STTManager {
       }
       if (interim) this.callbacks.onInterim?.(interim);
     };
-    
+
     this.safeRestartLocal();
     return true;
   }
 
   safeRestartLocal() {
     if (this.recognition && !this.recogActive && !this.isPaused) {
-      try { this.recognition.start(); } catch(_) {}
+      try { this.recognition.start(); } catch (_) { }
     }
   }
 
@@ -201,8 +201,8 @@ export class STTManager {
   stopAll() {
     this.closeAssembly();
     if (this.recognition) {
-       this.recogActive = false;
-       try { this.recognition.stop(); } catch(_) {}
+      this.recogActive = false;
+      try { this.recognition.stop(); } catch (_) { }
     }
   }
 }

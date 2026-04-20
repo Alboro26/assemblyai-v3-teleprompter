@@ -131,6 +131,15 @@
         <label for="noiseFloor">Noise floor: <span id="noiseFloorDisplay" class="delay-value">12</span></label>
         <input type="range" id="noiseFloor" min="0" max="50" step="1" value="12">
       </div>
+      <div class="form-group">
+        <label for="candidateLabelOverride">Candidate Speaker Label:</label>
+        <select id="candidateLabelOverride" class="settings-select">
+          <option value="auto">Auto-detect (default)</option>
+          <option value="A">Speaker A</option>
+          <option value="B">Speaker B</option>
+          <option value="C">Speaker C</option>
+        </select>
+      </div>
       <button id="btnSaveSettings" class="btn-save">Save & Reconnect</button>
     </div>
   </div>

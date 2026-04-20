@@ -10,7 +10,7 @@ export class AIManager {
     this.isRunning = false;
     this.responseCache = new Map();
     this.models = JSON.parse(localStorage.getItem('openrouter_models') || '[]');
-    
+
     // Initial sync in background
     this.syncModels();
   }
@@ -19,7 +19,7 @@ export class AIManager {
     const CACHE_KEY = 'openrouter_models';
     const TTL = 24 * 60 * 60 * 1000;
     const lastSync = parseInt(localStorage.getItem('openrouter_models_ts') || '0');
-    
+
     if (Date.now() - lastSync < TTL && this.models.length > 0) {
       this.populateDropdowns();
       return;
@@ -29,7 +29,7 @@ export class AIManager {
       const res = await fetch('/.netlify/functions/openrouter-proxy', { method: 'GET' });
       if (!res.ok) throw new Error('Model fetch failed');
       const data = await res.json();
-      
+
       if (data.data) {
         this.models = data.data;
         localStorage.setItem(CACHE_KEY, JSON.stringify(this.models));
@@ -55,15 +55,15 @@ export class AIManager {
     paidSel.innerHTML = '';
 
     this.models.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.name || m.id;
-        
-        if (this.isModelFree(m)) {
-            freeSel.appendChild(opt);
-        } else {
-            paidSel.appendChild(opt);
-        }
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name || m.id;
+
+      if (this.isModelFree(m)) {
+        freeSel.appendChild(opt);
+      } else {
+        paidSel.appendChild(opt);
+      }
     });
 
     // Restore selections
@@ -97,12 +97,12 @@ export class AIManager {
 
     const recentHistory = this.conversationHistory.slice(-10);
     const cacheKey = JSON.stringify(recentHistory);
-    
+
     if (this.responseCache.has(cacheKey)) {
-        console.log('[AI] Serving response from cache.');
-        this.callbacks.onResponse?.(this.responseCache.get(cacheKey));
-        this.isRunning = false;
-        return;
+      console.log('[AI] Serving response from cache.');
+      this.callbacks.onResponse?.(this.responseCache.get(cacheKey));
+      this.isRunning = false;
+      return;
     }
 
     const systemPrompt = `You are an AI assistant providing real-time speaking lines for a job candidate in a live interview.
@@ -120,7 +120,7 @@ DO NOT include any additional text such as:
 The output must be a single, concise, professional sentence or short paragraph that the candidate can read directly without any modification. If you lack context, provide a confident generic answer that demonstrates communication skills.`;
 
     const lastMessage = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1].content : '';
-    
+
     const messages = [
       {
         role: 'system',
@@ -139,7 +139,7 @@ The output must be a single, concise, professional sentence or short paragraph t
     const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemini-2.0-flash-lite-preview-02-05:free';
     const paidModel = localStorage.getItem('selectedPaidModel') || 'google/gemini-2.0-flash-001';
     const model = this.isFreeMode ? freeModel : paidModel;
-    
+
     try {
       let data;
       try {
@@ -148,7 +148,7 @@ The output must be a single, concise, professional sentence or short paragraph t
         console.warn(`[AI] Primary model ${model} error, trying fallback...`, err);
         data = await this.fetchOpenRouter('google/gemini-flash-1.5', messages);
       }
-      
+
       // Secondary check for empty response
       if (!data.choices?.[0]?.message?.content) {
         console.warn(`[AI] Primary model ${model} empty, trying fallback...`);
@@ -159,11 +159,11 @@ The output must be a single, concise, professional sentence or short paragraph t
       if (answer) {
         // 1. Initial cleanup of markdown/noise
         answer = answer.replace(/[*_`#>]/g, '').trim();
-        
+
         // 2. Remove common prefixes (now that we've trimmed)
         const prefixRegex = /^(Response:|Answer:|Suggestion:|Here's a suggestion:|Sure,|Certainly,|You could say:|Candidate:)\s*/i;
         answer = answer.replace(prefixRegex, '').trim();
-        
+
         // 3. Final trim and quote removal
         answer = answer.replace(/^["']|["']$/g, '').trim();
 
@@ -194,8 +194,8 @@ The output must be a single, concise, professional sentence or short paragraph t
       })
     });
     if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`HTTP ${res.status}: ${errText}`);
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status}: ${errText}`);
     }
     return await res.json();
   }
