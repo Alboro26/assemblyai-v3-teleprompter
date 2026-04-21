@@ -25,7 +25,8 @@ class AppController {
       selectedPaidModel: localStorage.getItem('selectedPaidModel') || 'google/gemini-2.0-flash-001',
       lastAiTriggerTime: 0,
       speakerMapping: { candidate: null, interviewer: null },
-      calibrationComplete: localStorage.getItem('userVoiceSignature') !== null
+      calibrationComplete: localStorage.getItem('userVoiceSignature') !== null,
+      fontSize: parseInt(localStorage.getItem('fontSize')) || 24
     };
 
     this.aiTimer = null; // For debouncing suggestions
@@ -65,15 +66,8 @@ class AppController {
       this._bind('btnCancelCalibration', 'onclick', () => this.stopCalibration());
 
       // Dashboard Grid Controls
-      const fontSlider = document.getElementById('fontSizeSlider');
-      if (fontSlider) {
-          fontSlider.addEventListener('input', (e) => {
-              const val = e.target.value + 'px';
-              const d = document.getElementById('fontSizeDisplay');
-              if (d) d.textContent = val;
-              document.documentElement.style.setProperty('--teleprompter-size', val);
-          });
-      }
+      this._bind('btnFontInc', 'onclick', () => this.updateFontSize(1));
+      this._bind('btnFontDec', 'onclick', () => this.updateFontSize(-1));
 
       this._bind('btnVoiceMode', 'onclick', () => this.switchMode('voice'));
       this._bind('btnCodingMode', 'onclick', () => this.switchMode('coding'));
@@ -148,6 +142,14 @@ class AppController {
       }
   }
 
+  updateFontSize(delta) {
+      this.state.fontSize = Math.max(12, Math.min(72, this.state.fontSize + delta));
+      localStorage.setItem('fontSize', this.state.fontSize);
+      const val = this.state.fontSize + 'px';
+      this._text('fontSizeDisplay', val);
+      document.documentElement.style.setProperty('--teleprompter-size', val);
+  }
+
   async handleCaptureCode() {
       if (this.state.currentMode !== 'coding' || !this.camera) return;
       const btn = document.getElementById('btnCaptureCode');
@@ -218,6 +220,7 @@ class AppController {
           this.state.speakerMapping.candidate = savedOverride;
       }
 
+      this.updateFontSize(0);
       this.syncEngineUI();
     } catch (e) {
       console.error("Config load error:", e);
