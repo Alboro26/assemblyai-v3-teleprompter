@@ -11,76 +11,94 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+  <div class="app-container">
+    <main class="dashboard-grid">
+      <aside class="sidebar-panel">
+        <div class="sidebar-header">
+          <span class="panel-title">TRANSCRIPT</span>
+          <button class="btn-hide" id="btnHideSidebar">Hide</button>
+        </div>
+        <div class="transcript-panel" id="transcriptContainer">
+          <div class="transcript-history teleprompter-scroll" id="transcriptHistory"></div>
+          <div class="interim-text" id="interimText"></div>
+        </div>
+      </aside>
 
-  <header>
-    <div class="header-left">
-      <div class="logo-container">
-        <svg viewBox="0 0 24 24" width="24" height="24">
-          <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="currentColor" />
-        </svg>
-        <div class="title"><span class="title-text">Interview Teleprompter</span></div>
-      </div>
-      <div class="engine-selector">
-        <button id="btnSelectAssembly" class="engine-btn active"><span class="btn-label">Cloud</span></button>
-        <button id="btnSelectLocal" class="engine-btn"><span class="btn-label">Local</span></button>
-      </div>
-    </div>
+      <section class="main-content-panel">
+        <!-- Voice Teleprompter Mode -->
+        <div class="teleprompter-panel" id="teleprompterPanel">
+          <div class="loader" id="loader"></div>
+          <div class="teleprompter-content" id="teleprompterContent">
+            <span class="placeholder-text">Ready for your interview. Start speaking and I'll generate answers for you.</span>
+          </div>
+        </div>
 
-    <div class="header-center">
-      <div class="status-badge" id="appStatus">
-        <div class="status-dot"></div>
-        <span id="appStatusText">Initializing</span>
-      </div>
-    </div>
+        <!-- Coding Camera Mode (Hidden by default) -->
+        <div class="camera-panel" id="cameraPanel" style="display: none;">
+           <video id="cameraFeed" autoplay playsinline></video>
+           <div class="camera-overlay">
+             <button id="btnCaptureCode" class="btn-primary-action">📸 Take Photo (<span id="photoCount">0</span>)</button>
+             <button id="btnSolveCode" class="btn-primary-action success" style="display: none;">🚀 Submit Challenge</button>
+           </div>
+        </div>
+      </section>
+    </main>
 
-    <div class="header-right">
-      <div class="toggle-group" id="paidToggleGroup">
-        <span class="toggle-label" id="labelPaid">PAID</span>
-        <label class="switch"><input type="checkbox" id="modelToggle"><span class="slider"></span></label>
-        <span class="toggle-label active" id="labelFree">FREE</span>
-      </div>
-      <button id="pauseBtn" class="btn-pause" title="Pause/Resume listening">
-        <span id="pauseBtnIcon">⏸️</span> <span id="pauseBtnText" class="btn-label">Pause</span>
-      </button>
-      <button id="btnCalibrate" title="Calibrate voice">🎤 <span class="btn-label">Calibrate</span></button>
-      <button id="btnClear" title="Clear history" style="color:var(--danger);">🗑️ <span class="btn-label">Clear</span></button>
-      <button id="btnSettings" title="Settings">⚙️ <span class="btn-label">Settings</span></button>
-    </div>
-  </header>
-
-  <main class="dashboard-grid">
-    <aside class="sidebar-panel">
-      <div class="sidebar-controls" style="display:none;"></div>
-      <div class="transcript-panel" id="transcriptContainer">
-        <div class="transcript-history teleprompter-scroll" id="transcriptHistory"></div>
-        <div class="interim-text" id="interimText"></div>
-        <button id="btnInspectContext" class="btn-inspect" title="View raw AI context">🔍 Inspect Context</button>
-      </div>
-    </aside>
-
-    <section class="main-content-panel">
-      <!-- Voice Teleprompter Mode -->
-      <div class="teleprompter-panel" id="teleprompterPanel">
-        <div class="loader" id="loader"></div>
-        <div class="teleprompter-content" id="teleprompterContent">
-          <span class="placeholder-text">Waiting for interviewer...</span>
+    <footer class="command-bar">
+      <div class="bar-left">
+        <div class="status-indicator">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="appStatusText">READY</span>
+        </div>
+        <div class="engine-pill">
+          <button id="btnSelectAssembly" class="engine-toggle active">Cloud</button>
+          <button id="btnSelectLocal" class="engine-toggle">Local</button>
         </div>
       </div>
 
-      <!-- Coding Camera Mode (Hidden by default) -->
-      <div class="camera-panel" id="cameraPanel" style="display: none;">
-         <video id="cameraFeed" autoplay playsinline></video>
-         <div class="camera-controls" style="display:flex; gap:1rem;">
-           <button id="btnCaptureCode" class="btn-capture">📸 Take Photo (<span id="photoCount">0</span>)</button>
-           <button id="btnSolveCode" class="btn-capture" style="background: linear-gradient(135deg, var(--success), #059669); display: none;">🚀 Submit Challenge</button>
-         </div>
+      <div class="bar-center">
+        <div class="mode-switcher">
+          <button id="btnVoiceMode" class="mode-tab active">
+             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+             Voice
+          </button>
+          <button id="btnCodingMode" class="mode-tab">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+            Camera
+          </button>
+        </div>
+        <button class="footer-btn action-btn" id="pauseBtn" title="Pause/Resume">
+          <svg id="svgPause" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          <svg id="svgPlay" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
       </div>
-    </section>
-  </main>
+
+      <div class="bar-right">
+         <div class="font-controls">
+           <button class="footer-btn" id="btnFontDec">
+             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+           </button>
+           <span class="font-display" id="fontSizeDisplay">24px</span>
+           <button class="footer-btn" id="btnFontInc">
+             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+           </button>
+         </div>
+         <button class="footer-btn icon-only" id="btnInspectContext" title="Show Context">
+           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+         </button>
+         <button class="footer-btn icon-only" id="btnClear" title="Clear History">
+           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6L18.1 20.3C18.1 21.2 17.3 22 16.4 22H7.6C6.7 22 5.9 21.2 5.9 20.3L5 6"/><path d="M10 11V17"/><path d="M14 11V17"/><path d="M9 6V4C9 3.1 9.7 2.3 10.6 2.3H13.4C14.3 2.3 15 3.1 15 4V6"/></svg>
+         </button>
+         <button class="footer-btn icon-only" id="btnSettings" title="Settings">
+           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+         </button>
+      </div>
+    </footer>
+  </div>
 
   <div class="calibration-overlay" id="calibrationOverlay">
     <div class="calibration-card">
-      <h2>🎤 Voice Calibration (10 sec)</h2>
+      <h2>Voice Calibration</h2>
       <p>Speak naturally for 10 seconds. This teaches the app to recognize <strong>your</strong> voice as the candidate.</p>
       <div class="calibration-progress-container">
         <div class="calibration-progress-bar" id="calibrationProgress"></div>
@@ -91,54 +109,35 @@
     </div>
   </div>
 
-  <div class="floating-control-bar">
-    <div class="control-left">
-      <button class="pill-btn icon-btn" id="pauseBtn" title="Pause/Resume">
-        <span id="pauseBtnIcon">⏸️</span>
-      </button>
-    </div>
-    
-    <div class="control-center">
-      <div class="pill-segmented">
-        <button id="btnVoiceMode" class="seg-btn active">
-           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
-           Voice
-        </button>
-        <button id="btnCodingMode" class="seg-btn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-          Camera
-        </button>
-      </div>
-    </div>
-    
-    <div class="control-right">
-       <div class="pill-font-scaler">
-         <button class="pill-btn text-btn" id="btnFontDec">-</button>
-         <span class="font-val" id="fontSizeDisplay">24px</span>
-         <button class="pill-btn text-btn" id="btnFontInc">+</button>
-       </div>
-    </div>
-  </div>
+
+
 
   <div class="modal-overlay" id="settingsModal">
     <div class="modal">
-      <h2>⚙️ Settings</h2>
-      <p class="section-label">🎙️ API Configuration</p>
-      <div class="form-group" style="color:var(--text-muted); font-size:0.9rem;">
-        API keys are now securely managed as environment variables via Netlify Dashboard.
+      <h2>Settings</h2>
+      <p class="section-label">Model Mode</p>
+      <div class="form-group" style="display:flex; justify-content:space-between; align-items:center;">
+         <span id="labelPaid" style="font-size:0.75rem; font-weight:700;">PAID MODE</span>
+         <label class="switch"><input type="checkbox" id="modelToggle"><span class="slider"></span></label>
+         <span id="labelFree" style="font-size:0.75rem; font-weight:700;">FREE MODE</span>
       </div>
-      <p class="section-label">📋 Context</p>
+
+      <p class="section-label">API Configuration</p>
+      <div class="form-group" style="color:var(--text-muted); font-size:0.8rem;">
+        API keys are securely managed via Netlify.
+      </div>
+      <p class="section-label">Context</p>
       <div class="form-group">
         <label for="jobDescription">Job Description</label>
-        <textarea id="jobDescription" rows="3"></textarea>
+        <textarea id="jobDescription" rows="3" placeholder="Paste job description here..."></textarea>
       </div>
       <div class="form-group">
         <label for="resumeText">Your Resume</label>
-        <textarea id="resumeText" rows="3"></textarea>
+        <textarea id="resumeText" rows="3" placeholder="Paste your resume here..."></textarea>
       </div>
-      <p class="section-label">⚙️ Behavior</p>
+      <p class="section-label">Behavior</p>
       <div class="form-group">
-        <label for="freeModel">Free Model Preference:</label>
+        <label for="freeModel">Free Model preference:</label>
         <select id="freeModel" class="settings-select">
           <option value="google/gemma-4-26b-a4b-it:free">Google: Gemma 4 26B A4B (free)</option>
           <option value="google/gemini-2.0-flash-lite-preview-02-05:free">Google: Gemini 2.0 Flash Lite (free)</option>
@@ -176,13 +175,14 @@
           <option value="C">Speaker C</option>
         </select>
       </div>
+      <button id="btnCalibrate" class="btn-save secondary" style="margin-top:0;">Recalibrate Voice Signature</button>
       <button id="btnSaveSettings" class="btn-save">Save & Reconnect</button>
     </div>
   </div>
 
   <div class="modal-overlay" id="inspectorModal">
     <div class="modal" style="max-width: 800px;">
-      <h2>🔍 Raw AI Context</h2>
+      <h2>Raw AI Context</h2>
       <pre id="inspectorContent" class="inspector-pre"></pre>
       <button class="btn-save secondary" onclick="document.getElementById('inspectorModal').classList.remove('active')">Close</button>
     </div>
@@ -191,7 +191,7 @@
   <div class="start-overlay" id="startOverlay">
     <div class="start-card">
       <h1 id="startTitle">Interview Ready?</h1>
-      <button id="btnStartSession" class="btn-start">Start Session 🚀</button>
+      <button id="btnStartSession" class="btn-start">Start Session</button>
     </div>
   </div>
 

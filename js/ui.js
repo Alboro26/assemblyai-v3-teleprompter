@@ -56,8 +56,20 @@ class AppController {
       this._bind('btnSelectLocal', 'onclick', () => this.setEngine('local'));
       this._bind('modelToggle', 'onchange', () => this.toggleModelMode());
 
+      // Sidebar
+      this._bind('btnHideSidebar', 'onclick', () => this.toggleSidebar());
+
       // Actions
       this._bind('btnSettings', 'onclick', () => this.toggleSettings());
+
+      // Click outside to close settings
+      const settingsOverlay = document.getElementById('settingsModal');
+      if (settingsOverlay) {
+        settingsOverlay.addEventListener('click', (e) => {
+          if (e.target === settingsOverlay) this.toggleSettings(false);
+        });
+      }
+
       this._bind('btnClear', 'onclick', () => this.clearHistory());
       this._bind('btnCalibrate', 'onclick', () => this.startCalibration());
       this._bind('btnStartSession', 'onclick', () => this.startSession());
@@ -73,6 +85,7 @@ class AppController {
       this._bind('btnCodingMode', 'onclick', () => this.switchMode('coding'));
       this._bind('btnCaptureCode', 'onclick', () => this.handleCaptureCode());
       this._bind('btnSolveCode', 'onclick', () => this.handleSolveCode());
+      this._bind('btnInspectContext', 'onclick', () => this.showInspector());
 
       // Hold Button
       const holdBtn = document.getElementById('holdBtn');
@@ -107,6 +120,15 @@ class AppController {
     else console.warn(`Missing element for binding: ${id}`);
   }
 
+  toggleSidebar() {
+    const grid = document.querySelector('.dashboard-grid');
+    const btn = document.getElementById('btnHideSidebar');
+    if (!grid) return;
+    
+    const isHidden = grid.classList.toggle('sidebar-hidden');
+    if (btn) btn.textContent = isHidden ? 'Show' : 'Hide';
+  }
+
   switchMode(mode) {
       const btnVoice = document.getElementById('btnVoiceMode');
       const btnCoding = document.getElementById('btnCodingMode');
@@ -120,11 +142,7 @@ class AppController {
           if (camPanel) camPanel.style.display = 'none';
           this.state.currentMode = 'voice';
           if (this.camera) this.camera.stop();
-          // Resume STT if session is already running
-          if (this.audio.audioCtx && this.stt) {
-              this.setEngine(this.state.isAssemblyMode ? 'assembly' : 'local');
-          }
-          this.updateStatus('Switched to Voice Mode', '');
+          this.updateStatus('READY', '');
       } else if (mode === 'coding') {
           if (btnVoice) btnVoice.classList.remove('active');
           if (btnCoding) btnCoding.classList.add('active');
@@ -135,8 +153,8 @@ class AppController {
           if (this.camera) {
               this.updateStatus('Starting Camera...', '');
               this.camera.start().then(ok => {
-                  if(!ok) this.updateStatus('Camera failed to start', 'error');
-                  else this.updateStatus('Camera Active (Coding Mode)', 'ok');
+                  if(!ok) this.updateStatus('Camera Error', 'error');
+                  else this.updateStatus('Camera Active', '');
               });
           }
       }
@@ -295,14 +313,17 @@ class AppController {
     this.stt.isPaused = this.state.isPaused;
 
     const pb = document.getElementById('pauseBtn');
+    const svgPause = document.getElementById('svgPause');
+    const svgPlay = document.getElementById('svgPlay');
+
     if (pb) {
       pb.classList.toggle('active', this.state.isPaused);
-      this._text('pauseBtnIcon', this.state.isPaused ? '▶️' : '⏸️');
-      this._text('pauseBtnText', this.state.isPaused ? 'Resume' : 'Pause');
+      if (svgPause) svgPause.style.display = this.state.isPaused ? 'none' : 'block';
+      if (svgPlay) svgPlay.style.display = this.state.isPaused ? 'block' : 'none';
     }
 
     if (this.state.isPaused) {
-      this.updateStatus('Paused', '');
+      this.updateStatus('PAUSED', '');
       this.stt.stopStreaming();
     } else {
       this.setEngine(this.state.isAssemblyMode ? 'assembly' : 'local');
@@ -338,14 +359,12 @@ class AppController {
 
   updateDiarizationUI() {
     const isCandidate = this.state.isHolding || this.state.matchConfidence > this.state.voiceThreshold;
-    const appStatus = document.getElementById('appStatus');
+    const dot = document.getElementById('statusDot');
     const appStatusText = document.getElementById('appStatusText');
 
-    if (appStatus) appStatus.classList.toggle('candidate-mode', isCandidate);
-    if (appStatusText && appStatus && !appStatus.classList.contains('generating') && !appStatus.classList.contains('error')) {
-      appStatusText.textContent = isCandidate ?
-        `Candidate (${Math.round(this.state.matchConfidence * 100)}%)` :
-        (this.state.userVoiceSignature ? `Interviewer (${Math.round(this.state.matchConfidence * 100)}%)` : 'Listening...');
+    if (dot) dot.style.background = isCandidate ? '#3b82f6' : '#f59e0b';
+    if (appStatusText) {
+      appStatusText.textContent = isCandidate ? "CANDIDATE" : "INTERVIEWER";
     }
   }
 
@@ -534,11 +553,15 @@ class AppController {
 
   updateStatus(text, type) {
     const appStatusText = document.getElementById('appStatusText');
-    const appStatus = document.getElementById('appStatus');
-    if (appStatusText) appStatusText.textContent = text;
-    if (appStatus) {
-      appStatus.classList.toggle('error', type === 'error');
-      appStatus.title = text; // Tooltip for full error
+    const dot = document.getElementById('statusDot');
+    if (appStatusText) appStatusText.textContent = text.toUpperCase();
+    if (dot) {
+      if (type === 'error') dot.style.background = '#ef4444';
+      else if (type === 'ok') dot.style.background = '#10b981';
+      else if (type === 'warn') dot.style.background = '#f59e0b';
+      else dot.style.background = '#475569';
+      
+      dot.title = text; // Tooltip for full error
     }
   }
 
@@ -645,9 +668,14 @@ class AppController {
   }
 
   // --- Utility Methods ---
-  toggleSettings() {
+  toggleSettings(force) {
     const sm = document.getElementById('settingsModal');
-    if (sm) sm.classList.toggle('active');
+    if (!sm) return;
+    if (typeof force === 'boolean') {
+      sm.classList.toggle('active', force);
+    } else {
+      sm.classList.toggle('active');
+    }
   }
   toggleModelMode() {
     const mt = document.getElementById('modelToggle');
