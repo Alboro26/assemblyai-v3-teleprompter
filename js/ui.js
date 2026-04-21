@@ -401,11 +401,12 @@ class AppController {
     const role = isCandidate ? 'candidate' : 'interviewer';
     
     // Auto-learn the mapping for the first time if not yet assigned
-    if (this.state.isAssemblyMode && rawLabel) {
-        if (!this.state.speakerMapping.candidate && isCandidate) {
+    const hasLabel = rawLabel !== null && rawLabel !== undefined;
+    if (this.state.isAssemblyMode && hasLabel) {
+        if (this.state.speakerMapping.candidate === null && isCandidate) {
             this.state.speakerMapping.candidate = rawLabel;
             console.log(`[UI] Learned candidate label: ${rawLabel}`);
-        } else if (!this.state.speakerMapping.interviewer && !isCandidate) {
+        } else if (this.state.speakerMapping.interviewer === null && !isCandidate) {
             this.state.speakerMapping.interviewer = rawLabel;
             console.log(`[UI] Learned interviewer label: ${rawLabel}`);
         }
@@ -419,7 +420,15 @@ class AppController {
   }
 
   determineSpeakerIdentity(rawLabel) {
-    if (!rawLabel) return false;
+    if (rawLabel === null || rawLabel === undefined) {
+        // Temporal Persistence: If label is missing, check if someone spoke in the last 2 seconds.
+        const history = this.state.conversationHistory;
+        const lastEntry = history.length > 0 ? history[history.length - 1] : null;
+        if (lastEntry && (Date.now() - (lastEntry.timestamp || 0)) < 2000) {
+            return lastEntry.role === 'user';
+        }
+        return false;
+    }
 
     // 1. Check manual override/mapping first
     if (this.state.speakerMapping.candidate) {
@@ -484,7 +493,8 @@ class AppController {
     this.state.conversationHistory.push({
       role: aiRole,
       content: text,
-      timestamp: now
+      timestamp: now,
+      rawLabel: rawLabel // Store for self-healing toggle
     });
 
     const p = document.createElement('p');
@@ -513,7 +523,21 @@ class AppController {
 
     entry.role = newRole;
     element.className = `transcript-entry ${uiRole}`;
-    console.log(`[UI] Toggled message ${index} identity to ${uiRole}`);
+    
+    // --- Self-Healing Identity Logic ---
+    // If the user manually corrects a message, update the global mapping
+    const rawLabel = entry.rawLabel;
+    if (rawLabel !== null && rawLabel !== undefined) {
+        if (newRole === 'user') {
+            this.state.speakerMapping.candidate = rawLabel;
+            if (this.state.speakerMapping.interviewer === rawLabel) this.state.speakerMapping.interviewer = null;
+        } else {
+            this.state.speakerMapping.interviewer = rawLabel;
+            if (this.state.speakerMapping.candidate === rawLabel) this.state.speakerMapping.candidate = null;
+        }
+        console.log(`[UI] Identity Healed: Speaker ${rawLabel} is now ${uiRole}`);
+        this.updateStatus(`Learned Speaker ${rawLabel} as ${uiRole}`, 'ok');
+    }
 
     // Refire AI after correction (debounced)
     this.triggerDelayedAI();

@@ -63,6 +63,8 @@ export class STTManager {
           console.error('[STT] AssemblyAI Error:', msg.error);
           this.callbacks.onStatus?.('Cloud API Error', 'error');
         }
+        // DEBUG: Uncomment for deep audit if IDs are missing
+        // console.log('[STT] v3 Raw:', msg); 
         this.handleAssemblyMessage(msg);
       };
 
