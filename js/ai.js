@@ -113,7 +113,10 @@ export class AIManager {
       return;
     }
 
-    const systemPrompt = `You are an AI assistant providing real-time speaking lines for a job candidate in a live interview.
+    const lastMessage = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1].content : '';
+    const isCodingChallenge = lastMessage.includes('[CODING CHALLENGE SUBMISSION]');
+
+    const systemPromptVoice = `You are an AI assistant providing real-time speaking lines for a job candidate in a live interview.
 
 Context:
 JOB DESCRIPTION: ${jobDesc}
@@ -127,12 +130,26 @@ DO NOT include any additional text such as:
 
 The output must be a single, concise, professional sentence or short paragraph that the candidate can read directly without any modification. If you lack context, provide a confident generic answer that demonstrates communication skills.`;
 
-    const lastMessage = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1].content : '';
+    const systemPromptCoding = `You are an elite professional taking a technical coding interview, acting as the ideal candidate for the role described below.
+
+Context:
+JOB DESCRIPTION: ${jobDesc}
+CANDIDATE RESUME: ${resumeText}
+
+You have just received the text of a coding challenge (extracted via OCR across one or multiple screenshots).
+Your task is to provide the EXACT code solution the candidate needs.
+CRITICAL INSTRUCTIONS:
+1. Write human-like code. Use natural industry-standard variable names appropriate for the role instead of robotic ones.
+2. Keep explanation extremely brief and focused on Time/Space complexity or core concepts.
+3. Be concise. Remember the candidate has to type and explain this quickly.`;
+
+    const userPromptVoice = `The interviewer just said: "${lastMessage}"\n\nProvide ONLY the candidate's spoken response. No other text.`;
+    const userPromptCoding = `Coding Challenge (OCR Text):\n"${lastMessage.replace('[CODING CHALLENGE SUBMISSION]', '').trim()}"\n\nProvide the code solution and a very brief explanation.`;
 
     const messages = [
       {
         role: 'system',
-        content: systemPrompt
+        content: isCodingChallenge ? systemPromptCoding : systemPromptVoice
       },
       ...recentHistory.slice(0, -1).map(m => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
@@ -140,7 +157,7 @@ The output must be a single, concise, professional sentence or short paragraph t
       })),
       {
         role: 'user',
-        content: `The interviewer just said: "${lastMessage}"\n\nProvide ONLY the candidate's spoken response. No other text.`
+        content: isCodingChallenge ? userPromptCoding : userPromptVoice
       }
     ];
 

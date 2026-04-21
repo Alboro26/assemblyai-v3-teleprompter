@@ -48,18 +48,34 @@
     </div>
   </header>
 
-  <main>
-    <div class="transcript-panel" id="transcriptContainer">
-      <div class="transcript-history" id="transcriptHistory"></div>
-      <div class="interim-text" id="interimText"></div>
-      <button id="btnInspectContext" class="btn-inspect" title="View raw AI context">🔍 Inspect Context</button>
-    </div>
-    <div class="teleprompter-panel">
-      <div class="loader" id="loader"></div>
-      <div class="teleprompter-content" id="teleprompterContent">
-        <span class="placeholder-text">Waiting for interviewer...</span>
+  <main class="dashboard-grid">
+    <aside class="sidebar-panel">
+      <div class="sidebar-controls" style="display:none;"></div>
+      <div class="transcript-panel" id="transcriptContainer">
+        <div class="transcript-history teleprompter-scroll" id="transcriptHistory"></div>
+        <div class="interim-text" id="interimText"></div>
+        <button id="btnInspectContext" class="btn-inspect" title="View raw AI context">🔍 Inspect Context</button>
       </div>
-    </div>
+    </aside>
+
+    <section class="main-content-panel">
+      <!-- Voice Teleprompter Mode -->
+      <div class="teleprompter-panel" id="teleprompterPanel">
+        <div class="loader" id="loader"></div>
+        <div class="teleprompter-content" id="teleprompterContent">
+          <span class="placeholder-text">Waiting for interviewer...</span>
+        </div>
+      </div>
+
+      <!-- Coding Camera Mode (Hidden by default) -->
+      <div class="camera-panel" id="cameraPanel" style="display: none;">
+         <video id="cameraFeed" autoplay playsinline></video>
+         <div class="camera-controls" style="display:flex; gap:1rem;">
+           <button id="btnCaptureCode" class="btn-capture">📸 Take Photo (<span id="photoCount">0</span>)</button>
+           <button id="btnSolveCode" class="btn-capture" style="background: linear-gradient(135deg, var(--success), #059669); display: none;">🚀 Submit Challenge</button>
+         </div>
+      </div>
+    </section>
   </main>
 
   <div class="calibration-overlay" id="calibrationOverlay">
@@ -75,13 +91,33 @@
     </div>
   </div>
 
-  <div class="controls">
-    <button class="hold-btn" id="holdBtn">
-      <svg viewBox="0 0 24 24" width="18" height="18">
-        <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="currentColor"/>
-      </svg>
-      <span id="holdBtnText">Hold to force Candidate</span>
-    </button>
+  <div class="floating-control-bar">
+    <div class="control-left">
+      <button class="pill-btn icon-btn" id="pauseBtn" title="Pause/Resume">
+        <span id="pauseBtnIcon">⏸️</span>
+      </button>
+    </div>
+    
+    <div class="control-center">
+      <div class="pill-segmented">
+        <button id="btnVoiceMode" class="seg-btn active">
+           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+           Voice
+        </button>
+        <button id="btnCodingMode" class="seg-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          Camera
+        </button>
+      </div>
+    </div>
+    
+    <div class="control-right">
+       <div class="pill-font-scaler">
+         <button class="pill-btn text-btn" id="btnFontDec">-</button>
+         <span class="font-val" id="fontSizeDisplay">24px</span>
+         <button class="pill-btn text-btn" id="btnFontInc">+</button>
+       </div>
+    </div>
   </div>
 
   <div class="modal-overlay" id="settingsModal">
@@ -161,6 +197,7 @@
 
   <div id="toast" class="toast">History Cleared</div>
 
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script type="module" src="js/ui.js"></script>
 </body>
 </html>

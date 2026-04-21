@@ -5,6 +5,7 @@
 import { AudioEngine } from './audio.js';
 import { STTManager } from './stt.js';
 import { AIManager } from './ai.js';
+import { CameraManager } from './camera.js';
 
 class AppController {
   constructor() {
@@ -16,8 +17,8 @@ class AppController {
       isCalibrating: false,
       voiceThreshold: 0.60,
       noiseFloorThreshold: 12,
-      aiTriggerDelay: 2.0,
       conversationHistory: [],
+      capturedTexts: [],
       userVoiceSignature: JSON.parse(localStorage.getItem('userVoiceSignature') || 'null'),
       matchConfidence: 0,
       selectedFreeModel: localStorage.getItem('selectedFreeModel') || 'google/gemini-2.0-flash-lite-preview-02-05:free',
@@ -39,6 +40,7 @@ class AppController {
       onResponse: (text) => this.handleAIResponse(text),
       onError: (err) => this.handleAIError(err)
     });
+    this.camera = new CameraManager();
 
     this.stt.setAudioEngine(this.audio);
     this.initEventListeners();
@@ -61,6 +63,22 @@ class AppController {
       this._bind('btnInspectContext', 'onclick', () => this.showInspector());
       this._bind('btnSaveSettings', 'onclick', () => this.saveSettings());
       this._bind('btnCancelCalibration', 'onclick', () => this.stopCalibration());
+
+      // Dashboard Grid Controls
+      const fontSlider = document.getElementById('fontSizeSlider');
+      if (fontSlider) {
+          fontSlider.addEventListener('input', (e) => {
+              const val = e.target.value + 'px';
+              const d = document.getElementById('fontSizeDisplay');
+              if (d) d.textContent = val;
+              document.documentElement.style.setProperty('--teleprompter-size', val);
+          });
+      }
+
+      this._bind('btnVoiceMode', 'onclick', () => this.switchMode('voice'));
+      this._bind('btnCodingMode', 'onclick', () => this.switchMode('coding'));
+      this._bind('btnCaptureCode', 'onclick', () => this.handleCaptureCode());
+      this._bind('btnSolveCode', 'onclick', () => this.handleSolveCode());
 
       // Hold Button
       const holdBtn = document.getElementById('holdBtn');
@@ -93,6 +111,77 @@ class AppController {
     const el = document.getElementById(id);
     if (el) el[event] = fn;
     else console.warn(`Missing element for binding: ${id}`);
+  }
+
+  switchMode(mode) {
+      const btnVoice = document.getElementById('btnVoiceMode');
+      const btnCoding = document.getElementById('btnCodingMode');
+      const telePanel = document.getElementById('teleprompterPanel');
+      const camPanel = document.getElementById('cameraPanel');
+
+      if (mode === 'voice') {
+          if (btnVoice) btnVoice.classList.add('active');
+          if (btnCoding) btnCoding.classList.remove('active');
+          if (telePanel) telePanel.style.display = 'flex';
+          if (camPanel) camPanel.style.display = 'none';
+          this.state.currentMode = 'voice';
+          if (this.camera) this.camera.stop();
+          // Resume STT if session is already running
+          if (this.audio.audioCtx && this.stt) {
+              this.setEngine(this.state.isAssemblyMode ? 'assembly' : 'local');
+          }
+          this.updateStatus('Switched to Voice Mode', '');
+      } else if (mode === 'coding') {
+          if (btnVoice) btnVoice.classList.remove('active');
+          if (btnCoding) btnCoding.classList.add('active');
+          if (telePanel) telePanel.style.display = 'none';
+          if (camPanel) camPanel.style.display = 'flex';
+          this.state.currentMode = 'coding';
+          if (this.stt) this.stt.stopAll();
+          if (this.camera) {
+              this.updateStatus('Starting Camera...', '');
+              this.camera.start().then(ok => {
+                  if(!ok) this.updateStatus('Camera failed to start', 'error');
+                  else this.updateStatus('Camera Active (Coding Mode)', 'ok');
+              });
+          }
+      }
+  }
+
+  async handleCaptureCode() {
+      if (this.state.currentMode !== 'coding' || !this.camera) return;
+      const btn = document.getElementById('btnCaptureCode');
+      if (btn) btn.disabled = true;
+      
+      const extractedText = await this.camera.captureAndOCR((msg, type) => this.updateStatus(msg, type));
+      
+      if (btn) btn.disabled = false;
+
+      if (extractedText && extractedText.trim().length > 5) {
+          this.state.capturedTexts.push(extractedText);
+          this._text('photoCount', this.state.capturedTexts.length);
+          const btnSolve = document.getElementById('btnSolveCode');
+          if (btnSolve) btnSolve.style.display = 'inline-block';
+      } else {
+          this.updateStatus('Could not read code. Try again.', 'error');
+      }
+  }
+
+  async handleSolveCode() {
+      if (this.state.capturedTexts.length === 0) return;
+      const payloadText = this.state.capturedTexts.join('\n\n--- NEXT PART ---\n\n');
+      
+      this.state.capturedTexts = []; // reset buffer
+      this._text('photoCount', '0');
+      const btnSolve = document.getElementById('btnSolveCode');
+      if (btnSolve) btnSolve.style.display = 'none';
+
+      const payload = `[CODING CHALLENGE SUBMISSION]\n${payloadText}`;
+      // Inject as interviewer context
+      this.addTranscriptEntry(payload, 'interviewer', 'CAMERA-OCR');
+      // Switch back to voice mode so we can talk and see the generated code.
+      this.switchMode('voice');
+      this.triggerDelayedAI();
   }
 
   loadConfig() {
