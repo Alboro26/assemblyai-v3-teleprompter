@@ -161,8 +161,8 @@ CRITICAL INSTRUCTIONS:
       }
     ];
 
-    const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemma-3-27b-it:free';
-    const paidModel = localStorage.getItem('selectedPaidModel') || 'openai/gpt-4o-mini';
+    const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+    const paidModel = localStorage.getItem('selectedPaidModel') || 'google/gemini-2.0-flash-001';
     const model = this.isFreeMode ? freeModel : paidModel;
 
     try {

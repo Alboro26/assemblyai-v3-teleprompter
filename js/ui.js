@@ -85,7 +85,6 @@ class AppController {
       this._bind('btnCodingMode', 'onclick', () => this.switchMode('coding'));
       this._bind('btnCaptureCode', 'onclick', () => this.handleCaptureCode());
       this._bind('btnSolveCode', 'onclick', () => this.handleSolveCode());
-      this._bind('btnInspectContext', 'onclick', () => this.showInspector());
 
       // Hold Button
       const holdBtn = document.getElementById('holdBtn');
@@ -566,10 +565,11 @@ class AppController {
   }
 
   handleAIStart() {
-    const appStatus = document.getElementById('appStatus');
+    const dot = document.getElementById('statusDot');
     const loader = document.getElementById('loader');
-    if (appStatus) appStatus.classList.add('generating');
+    if (dot) dot.classList.add('pulse-generating');
     if (loader) loader.style.display = 'block';
+    this.updateStatus('AI ANALYZING...', 'ok');
   }
 
   handleAIResponse(text) {
@@ -577,17 +577,18 @@ class AppController {
     if (el) el.innerHTML = text;
     this.state.conversationHistory.push({ role: 'assistant', content: text });
 
-    const appStatus = document.getElementById('appStatus');
+    const dot = document.getElementById('statusDot');
     const loader = document.getElementById('loader');
-    if (appStatus) appStatus.classList.remove('generating');
+    if (dot) dot.classList.remove('pulse-generating');
     if (loader) loader.style.display = 'none';
+    this.updateStatus('READY', 'ok');
   }
 
   handleAIError(err) {
     this.updateStatus(err, 'error');
-    const appStatus = document.getElementById('appStatus');
+    const dot = document.getElementById('statusDot');
     const loader = document.getElementById('loader');
-    if (appStatus) appStatus.classList.remove('generating');
+    if (dot) dot.classList.remove('pulse-generating');
     if (loader) loader.style.display = 'none';
   }
 
