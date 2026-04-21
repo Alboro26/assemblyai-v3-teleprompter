@@ -463,8 +463,7 @@ html, body {
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: -10px 0 30px rgba(0,0,0,0.5);
   overflow-y: auto;
-  padding-bottom: 8rem; /* Extra space for taskbars/scrolling */
-  max-height: 100vh;
+  max-height: 100%;
 }
 
 .modal-overlay.active .modal { transform: translateX(0); }
@@ -504,6 +503,7 @@ html, body {
   font-size: 1rem;
   cursor: pointer;
   margin-top: 1rem;
+  margin-bottom: 4rem; /* Safe area for taskbars */
   transition: transform 0.1s;
 }
 .btn-save:active { transform: scale(0.98); }
