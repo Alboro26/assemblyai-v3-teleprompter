@@ -175,7 +175,9 @@ export class STTManager {
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const res = e.results[i];
         if (res.isFinal) {
-          this.callbacks.onFinal?.(res[0].transcript.trim(), 'LOCAL');
+          const text = res[0].transcript.trim();
+          console.log('[STT] Local Final:', text);
+          this.callbacks.onFinal?.(text, 'LOCAL');
         } else {
           interim += res[0].transcript;
         }
@@ -183,6 +185,7 @@ export class STTManager {
       if (interim) this.callbacks.onInterim?.(interim);
     };
 
+    console.log('[STT] Local Engine Initialized');
     this.safeRestartLocal();
     return true;
   }

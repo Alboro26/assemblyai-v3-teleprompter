@@ -116,10 +116,12 @@
     <div class="modal">
       <h2>Settings</h2>
       <p class="section-label">Model Mode</p>
-      <div class="form-group" style="display:flex; justify-content:space-between; align-items:center;">
-         <span id="labelPaid" style="font-size:0.75rem; font-weight:700;">PAID MODE</span>
-         <label class="switch"><input type="checkbox" id="modelToggle"><span class="slider"></span></label>
-         <span id="labelFree" style="font-size:0.75rem; font-weight:700;">FREE MODE</span>
+      <div class="form-group">
+        <div class="switch-container">
+           <label class="switch-label" id="labelPaid" for="modelToggle">Paid Mode</label>
+           <input type="checkbox" id="modelToggle" class="hidden-checkbox">
+           <label class="switch-label" id="labelFree" for="modelToggle">Free Mode</label>
+        </div>
       </div>
 
       <p class="section-label">API Configuration</p>
@@ -194,9 +196,9 @@
       <button id="btnStartSession" class="btn-start">Start Session</button>
     </div>
   </div>
-
   <div id="toast" class="toast">History Cleared</div>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script type="module" src="js/ui.js"></script>
 </body>

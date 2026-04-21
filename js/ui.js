@@ -467,7 +467,7 @@ class AppController {
       // Update the DOM instead of creating new
       const hist = document.getElementById('transcriptHistory');
       if (hist && hist.lastElementChild) {
-        const idTag = rawLabel || (this.state.isAssemblyMode ? 'CLOUD_MISSING' : 'LOCAL');
+        const idTag = (rawLabel !== null && rawLabel !== undefined) ? rawLabel : (this.state.isAssemblyMode ? 'A' : 'Local');
         hist.lastElementChild.textContent = `${lastHumanEntry.content} [ID: ${idTag}]`;
         hist.scrollTop = hist.scrollHeight;
       }
@@ -492,7 +492,7 @@ class AppController {
     p.dataset.index = entryIndex; // Store index for toggling
     p.onclick = () => this.toggleEntryRole(entryIndex, p);
 
-    const idTag = rawLabel || (this.state.isAssemblyMode ? 'CLOUD_MISSING' : 'LOCAL');
+    const idTag = (rawLabel !== null && rawLabel !== undefined) ? rawLabel : (this.state.isAssemblyMode ? 'A' : 'Local');
     p.textContent = `${text} [ID: ${idTag}]`;
 
     const hist = document.getElementById('transcriptHistory');
@@ -574,7 +574,14 @@ class AppController {
 
   handleAIResponse(text) {
     const el = document.getElementById('teleprompterContent');
-    if (el) el.innerHTML = text;
+    if (el) {
+        // Use marked.js for premium formatting (code blocks, bold, etc.)
+        if (window.marked) {
+            el.innerHTML = marked.parse(text);
+        } else {
+            el.textContent = text;
+        }
+    }
     this.state.conversationHistory.push({ role: 'assistant', content: text });
 
     const dot = document.getElementById('statusDot');

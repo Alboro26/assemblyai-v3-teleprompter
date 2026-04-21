@@ -204,6 +204,7 @@ html, body {
   padding: 2.5rem;
   text-align: center;
   position: relative;
+  overflow-y: auto;
 }
 
 .teleprompter-content {
@@ -462,6 +463,8 @@ html, body {
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: -10px 0 30px rgba(0,0,0,0.5);
   overflow-y: auto;
+  padding-bottom: 8rem; /* Extra space for taskbars/scrolling */
+  max-height: 100vh;
 }
 
 .modal-overlay.active .modal { transform: translateX(0); }
@@ -540,9 +543,74 @@ html, body {
   transition: all 0.2s;
   box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
 }
-.btn-start:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(37, 99, 235, 0.5); }
 
-.inspector-pre {
+/* --- Premium Toggle Switch --- */
+.switch-container {
+  display: flex;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  position: relative;
+  gap: 4px;
+}
+
+.switch-label {
+  flex: 1;
+  padding: 10px;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  cursor: pointer;
+  z-index: 1;
+  transition: all 0.3s;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.switch-label.active {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+#labelPaid.active { color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.4); }
+
+.hidden-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0; height: 0;
+}
+
+/* --- Markdown Styles --- */
+.teleprompter-content p { margin: 0.5em 0; }
+.teleprompter-content code {
+  background: rgba(0,0,0,0.4);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Fira Code', monospace;
+  color: var(--accent);
+}
+.teleprompter-content pre {
+  background: rgba(0,0,0,0.6);
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+.teleprompter-content pre code {
+  background: transparent;
+  padding: 0;
+  display: block;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #fff;
+}
+.teleprompter-content strong { color: var(--accent); }
   background: #000;
   color: #10b981;
   padding: 1rem;
