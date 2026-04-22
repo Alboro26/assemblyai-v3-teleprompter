@@ -56,6 +56,23 @@ export class AudioEngine {
     }
   }
 
+  stop() {
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(t => t.stop());
+      this.mediaStream = null;
+    }
+    if (this.audioCtx && this.audioCtx.state !== 'closed') {
+      this.audioCtx.suspend();
+    }
+    if (this.analyser) {
+        this.analyser.disconnect();
+    }
+    if (this.workletNode) {
+        this.workletNode.disconnect();
+    }
+    console.log('[Audio] Engine stopped and resources released.');
+  }
+
   getRMS() {
     if (!this.analyser) return 0;
     const data = new Uint8Array(this.analyser.frequencyBinCount);

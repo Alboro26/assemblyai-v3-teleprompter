@@ -1,4 +1,4 @@
-const CACHE_NAME = 'teleprompter-v4';
+const CACHE_NAME = 'teleprompter-v14';
 const ASSETS = [
   '/',
   '/index.html',
@@ -9,6 +9,7 @@ const ASSETS = [
   '/js/stt.js',
   '/js/audio.js',
   '/js/ai.js',
+  '/js/camera.js',
   '/js/audio-worklet-processor.js',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png'
@@ -29,6 +30,7 @@ self.addEventListener('activate', (e) => {
       );
     })
   );
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', (e) => {
@@ -39,17 +41,24 @@ self.addEventListener('fetch', (e) => {
     return e.respondWith(fetch(e.request));
   }
 
-  // Cache-First strategy for assets
+  // Network-First for JS and CSS — always get fresh code
+  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
+    return e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
+  }
+
+  // Cache-First for everything else (images, fonts, HTML)
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
-      // 1. Return from cache if we have it
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      
-      // 2. Otherwise fetch from network
+      if (cachedResponse) return cachedResponse;
       return fetch(e.request).catch(() => {
-        // 3. Fallback to offline page for navigation requests if network fails
         if (e.request.mode === 'navigate') {
           return caches.match('/offline.html');
         }

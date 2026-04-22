@@ -46,7 +46,18 @@ export class AIManager {
         this.populateDropdowns();
       }
     } catch (e) {
-      console.warn('[AI] Model sync failed, using defaults.', e);
+      console.warn('[AI] Model sync from network failed, attempting to load local defaults...', e);
+      try {
+        const localRes = await fetch('models.json');
+        if (localRes.ok) {
+          const localData = await localRes.json();
+          this.models = localData.data || localData;
+          console.log(`[AI] Loaded ${this.models.length} models from local models.json`);
+          this.populateDropdowns();
+        }
+      } catch (localErr) {
+        console.error('[AI] Local model fallback also failed.', localErr);
+      }
     }
   }
 
@@ -114,8 +125,6 @@ export class AIManager {
     }
 
     const lastMessage = recentHistory.length > 0 ? recentHistory[recentHistory.length - 1].content : '';
-    const isCodingChallenge = lastMessage.includes('[CODING CHALLENGE SUBMISSION]');
-
     const systemPromptVoice = `You are an AI assistant providing real-time speaking lines for a job candidate in a live interview.
 
 Context:
@@ -130,26 +139,10 @@ DO NOT include any additional text such as:
 
 The output must be a single, concise, professional sentence or short paragraph that the candidate can read directly without any modification. If you lack context, provide a confident generic answer that demonstrates communication skills.`;
 
-    const systemPromptCoding = `You are an elite professional taking a technical coding interview, acting as the ideal candidate for the role described below.
-
-Context:
-JOB DESCRIPTION: ${jobDesc}
-CANDIDATE RESUME: ${resumeText}
-
-You have just received the text of a coding challenge (extracted via OCR across one or multiple screenshots).
-Your task is to provide the EXACT code solution the candidate needs.
-CRITICAL INSTRUCTIONS:
-1. Write human-like code. Use natural industry-standard variable names appropriate for the role instead of robotic ones.
-2. Keep explanation extremely brief and focused on Time/Space complexity or core concepts.
-3. Be concise. Remember the candidate has to type and explain this quickly.`;
-
-    const userPromptVoice = `The interviewer just said: "${lastMessage}"\n\nProvide ONLY the candidate's spoken response. No other text.`;
-    const userPromptCoding = `Coding Challenge (OCR Text):\n"${lastMessage.replace('[CODING CHALLENGE SUBMISSION]', '').trim()}"\n\nProvide the code solution and a very brief explanation.`;
-
     const messages = [
       {
         role: 'system',
-        content: isCodingChallenge ? systemPromptCoding : systemPromptVoice
+        content: systemPromptVoice
       },
       ...recentHistory.slice(0, -1).map(m => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
@@ -157,7 +150,7 @@ CRITICAL INSTRUCTIONS:
       })),
       {
         role: 'user',
-        content: isCodingChallenge ? userPromptCoding : userPromptVoice
+        content: `The interviewer just said: "${lastMessage}"\n\nProvide ONLY the candidate's spoken response. No other text.`
       }
     ];
 
@@ -182,14 +175,14 @@ CRITICAL INSTRUCTIONS:
 
       let answer = data.choices?.[0]?.message?.content;
       if (answer) {
-        // 1. Initial cleanup of markdown/noise
+        // Cleanup markdown/noise for voice response
         answer = answer.replace(/[*_`#>]/g, '').trim();
 
-        // 2. Remove common prefixes (now that we've trimmed)
+        // Remove common prefixes
         const prefixRegex = /^(Response:|Answer:|Suggestion:|Here's a suggestion:|Sure,|Certainly,|You could say:|Candidate:)\s*/i;
         answer = answer.replace(prefixRegex, '').trim();
 
-        // 3. Final trim and quote removal
+        // Final trim and quote removal
         answer = answer.replace(/^["']|["']$/g, '').trim();
 
         this.responseCache.set(cacheKey, answer);
@@ -199,6 +192,74 @@ CRITICAL INSTRUCTIONS:
       }
     } catch (err) {
       console.error('[AI] Generation failed:', err);
+      this.callbacks.onError?.(err.message);
+    } finally {
+      this.isRunning = false;
+    }
+  }
+
+  /**
+   * Sends one or more Base64 screenshots directly to the multimodal API.
+   * Bypasses OCR entirely — the model sees the raw pixels.
+   * @param {string[]} images - Array of Base64 data URLs (e.g. from camera.captureBase64())
+   * @param {string} jobDesc
+   * @param {string} resumeText
+   */
+  async generateCodingResponse(images, jobDesc, resumeText) {
+    if (this.isRunning) return;
+    this.callbacks.onStart?.();
+    this.isRunning = true;
+
+    const systemPrompt = `You are an elite Senior Engineer taking a technical interview for this role:
+JOB: ${jobDesc}
+RESUME: ${resumeText}
+
+Analyze the coding challenge in the screenshots and provide:
+1. The solution code WRAPPED in triple backticks (\`\`\`).
+2. A brief prose explanation OUTSIDE the backticks.
+
+CRITICAL: Use standard Markdown. Do not put the explanation inside the code block as comments unless they are brief. Keep the prose and code blocks strictly separate so they can be parsed for different UI panels.`;
+
+    // Build multimodal content: one image_url block per screenshot
+    const imageBlocks = images.map(dataUrl => ({
+      type: 'image_url',
+      image_url: { url: dataUrl }
+    }));
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          ...imageBlocks,
+          { type: 'text', text: 'Solve the coding challenge shown in the screenshot(s) above.' }
+        ]
+      }
+    ];
+
+    const freeModel = localStorage.getItem('selectedFreeModel') || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+    const paidModel = localStorage.getItem('selectedPaidModel') || 'google/gemini-2.0-flash-001';
+    const model = this.isFreeMode ? freeModel : paidModel;
+
+    try {
+      const res = await fetch('/.netlify/functions/openrouter-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 1500 })
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
+      const answer = data.choices?.[0]?.message?.content?.trim();
+      if (answer) {
+        this.callbacks.onResponse?.(answer);
+      } else {
+        throw new Error('No content returned from AI');
+      }
+    } catch (err) {
+      console.error('[AI] Coding generation failed:', err);
       this.callbacks.onError?.(err.message);
     } finally {
       this.isRunning = false;

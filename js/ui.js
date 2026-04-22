@@ -13,12 +13,11 @@ class AppController {
       isPaused: false,
       isAssemblyMode: true,
       isFreeMode: true,
-      isHolding: false,
       isCalibrating: false,
       voiceThreshold: 0.60,
       noiseFloorThreshold: 12,
       conversationHistory: [],
-      capturedTexts: [],
+      capturedImages: [],
       userVoiceSignature: JSON.parse(localStorage.getItem('userVoiceSignature') || 'null'),
       matchConfidence: 0,
       selectedFreeModel: localStorage.getItem('selectedFreeModel') || 'google/gemini-2.0-flash-lite-preview-02-05:free',
@@ -26,7 +25,8 @@ class AppController {
       lastAiTriggerTime: 0,
       speakerMapping: { candidate: null, interviewer: null },
       calibrationComplete: localStorage.getItem('userVoiceSignature') !== null,
-      fontSize: parseInt(localStorage.getItem('fontSize')) || 24
+      fontSize: parseInt(localStorage.getItem('fontSize')) || 24,
+      lastStatusType: 'ok'
     };
 
     this.aiTimer = null; // For debouncing suggestions
@@ -83,17 +83,10 @@ class AppController {
 
       this._bind('btnVoiceMode', 'onclick', () => this.switchMode('voice'));
       this._bind('btnCodingMode', 'onclick', () => this.switchMode('coding'));
-      this._bind('btnCaptureCode', 'onclick', () => this.handleCaptureCode());
-      this._bind('btnSolveCode', 'onclick', () => this.handleSolveCode());
+      this._bind('btnHudCapture', 'onclick', () => this.handleCaptureCode());
+      this._bind('btnHudSolve', 'onclick', () => this.handleSolveCode());
+      this._bind('btnHudToggle', 'onclick', () => this.cycleHudLayout());
 
-      // Hold Button
-      const holdBtn = document.getElementById('holdBtn');
-      if (holdBtn) {
-        holdBtn.addEventListener('mousedown', () => this.setHolding(true));
-        holdBtn.addEventListener('mouseup', () => this.setHolding(false));
-        holdBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.setHolding(true); });
-        holdBtn.addEventListener('touchend', () => this.setHolding(false));
-      }
 
       // Sliders
       this._bind('aiDelay', 'oninput', (e) => {
@@ -120,12 +113,14 @@ class AppController {
   }
 
   toggleSidebar() {
+    if (this.state.currentMode === 'coding') {
+        this.cycleHudLayout();
+        return;
+    }
     const grid = document.querySelector('.dashboard-grid');
-    const btn = document.getElementById('btnHideSidebar');
-    if (!grid) return;
-    
-    const isHidden = grid.classList.toggle('sidebar-hidden');
-    if (btn) btn.textContent = isHidden ? 'Show' : 'Hide';
+    if (grid) {
+      grid.classList.toggle('sidebar-hidden');
+    }
   }
 
   switchMode(mode) {
@@ -133,12 +128,18 @@ class AppController {
       const btnCoding = document.getElementById('btnCodingMode');
       const telePanel = document.getElementById('teleprompterPanel');
       const camPanel = document.getElementById('cameraPanel');
+      const hudSidebar = document.getElementById('hudSidebar');
+      const sidebarPanel = document.querySelector('.sidebar-panel');
+      const grid = document.querySelector('.dashboard-grid');
 
       if (mode === 'voice') {
           if (btnVoice) btnVoice.classList.add('active');
           if (btnCoding) btnCoding.classList.remove('active');
           if (telePanel) telePanel.style.display = 'flex';
           if (camPanel) camPanel.style.display = 'none';
+          if (hudSidebar) hudSidebar.style.display = 'none';
+          if (sidebarPanel) sidebarPanel.style.display = 'flex';
+          if (grid) grid.classList.remove('coding-monitor', 'coding-focus', 'coding-stealth');
           this.state.currentMode = 'voice';
           if (this.camera) this.camera.stop();
           this.updateStatus('READY', '');
@@ -147,16 +148,31 @@ class AppController {
           if (btnCoding) btnCoding.classList.add('active');
           if (telePanel) telePanel.style.display = 'none';
           if (camPanel) camPanel.style.display = 'flex';
+          if (sidebarPanel) sidebarPanel.style.display = 'none';
+          if (hudSidebar) hudSidebar.style.display = 'flex';
+          if (grid) {
+              grid.classList.remove('coding-focus', 'coding-stealth');
+              grid.classList.add('coding-monitor');
+          }
+          this.state.hudLayoutState = 0;
           this.state.currentMode = 'coding';
-          if (this.stt) this.stt.stopAll();
           if (this.camera) {
               this.updateStatus('Starting Camera...', '');
               this.camera.start().then(ok => {
-                  if(!ok) this.updateStatus('Camera Error', 'error');
+                  if (!ok) this.updateStatus('Camera Error', 'error');
                   else this.updateStatus('Camera Active', '');
               });
           }
       }
+  }
+
+  cycleHudLayout() {
+      const grid = document.querySelector('.dashboard-grid');
+      if (!grid) return;
+      const states = ['coding-monitor', 'coding-focus', 'coding-stealth'];
+      this.state.hudLayoutState = ((this.state.hudLayoutState || 0) + 1) % 3;
+      grid.classList.remove(...states);
+      grid.classList.add(states[this.state.hudLayoutState]);
   }
 
   updateFontSize(delta) {
@@ -167,40 +183,58 @@ class AppController {
       document.documentElement.style.setProperty('--teleprompter-size', val);
   }
 
-  async handleCaptureCode() {
+  handleCaptureCode() {
       if (this.state.currentMode !== 'coding' || !this.camera) return;
-      const btn = document.getElementById('btnCaptureCode');
-      if (btn) btn.disabled = true;
-      
-      const extractedText = await this.camera.captureAndOCR((msg, type) => this.updateStatus(msg, type));
-      
-      if (btn) btn.disabled = false;
+      const dataUrl = this.camera.captureBase64();
+      if (!dataUrl) { this.updateStatus('No camera feed active.', 'error'); return; }
+      if (!this.state.capturedImages) this.state.capturedImages = [];
+      this.state.capturedImages.push(dataUrl);
+      this._updateCaptureUI();
+      this.updateStatus(`Frame ${this.state.capturedImages.length} captured`, 'ok');
+  }
 
-      if (extractedText && extractedText.trim().length > 5) {
-          this.state.capturedTexts.push(extractedText);
-          this._text('photoCount', this.state.capturedTexts.length);
-          const btnSolve = document.getElementById('btnSolveCode');
-          if (btnSolve) btnSolve.style.display = 'inline-block';
-      } else {
-          this.updateStatus('Could not read code. Try again.', 'error');
-      }
+  removeCapture(index) {
+      if (!this.state.capturedImages) return;
+      this.state.capturedImages.splice(index, 1);
+      this._updateCaptureUI();
+  }
+
+  _updateCaptureUI() {
+      const images = this.state.capturedImages || [];
+      this._text('hudPhotoCount', images.length);
+      const btnSolve = document.getElementById('btnHudSolve');
+      if (btnSolve) btnSolve.style.display = images.length > 0 ? 'inline-block' : 'none';
+
+      const strip = document.getElementById('cameraThumbnailStrip');
+      if (!strip) return;
+      strip.innerHTML = '';
+      images.forEach((dataUrl, i) => {
+          const thumb = document.createElement('div');
+          thumb.className = 'camera-thumb';
+          const img = document.createElement('img');
+          img.src = dataUrl;
+          const del = document.createElement('button');
+          del.className = 'camera-thumb-delete';
+          del.title = 'Remove';
+          del.textContent = '✕';
+          del.onclick = () => this.removeCapture(i);
+          thumb.appendChild(img);
+          thumb.appendChild(del);
+          strip.appendChild(thumb);
+      });
   }
 
   async handleSolveCode() {
-      if (this.state.capturedTexts.length === 0) return;
-      const payloadText = this.state.capturedTexts.join('\n\n--- NEXT PART ---\n\n');
-      
-      this.state.capturedTexts = []; // reset buffer
-      this._text('photoCount', '0');
-      const btnSolve = document.getElementById('btnSolveCode');
-      if (btnSolve) btnSolve.style.display = 'none';
-
-      const payload = `[CODING CHALLENGE SUBMISSION]\n${payloadText}`;
-      // Inject as interviewer context
-      this.addTranscriptEntry(payload, 'interviewer', 'CAMERA-OCR');
-      // Switch back to voice mode so we can talk and see the generated code.
-      this.switchMode('voice');
-      this.triggerDelayedAI();
+      if (!this.state.capturedImages || this.state.capturedImages.length === 0) return;
+      const images = [...this.state.capturedImages];
+      this.state.capturedImages = [];
+      this._updateCaptureUI();
+      this.updateStatus('Analyzing image(s)...', '');
+      await this.ai.generateCodingResponse(
+          images,
+          localStorage.getItem('jobDescription') || '',
+          localStorage.getItem('resumeText') || ''
+      );
   }
 
   loadConfig() {
@@ -232,7 +266,7 @@ class AppController {
       this._val('paidModel', this.state.selectedPaidModel);
       
       const savedOverride = localStorage.getItem('candidateLabelOverride') || 'auto';
-      this._val('candidateLabelOverride', savedOverride);
+      this._val('candidateSpeaker', savedOverride);
       if (savedOverride !== 'auto') {
           this.state.speakerMapping.candidate = savedOverride;
       }
@@ -248,6 +282,21 @@ class AppController {
   _text(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
 
   updateModelToggleUI() {
+    // Sync Speaker Label Dropdown
+    const sLabel = document.getElementById('candidateSpeaker');
+    if (sLabel) {
+        sLabel.value = this.state.speakerMapping.candidate || 'auto';
+        sLabel.onchange = (e) => {
+            const val = e.target.value;
+            const mapped = val === 'auto' ? null : val;
+            this.state.speakerMapping.candidate = mapped;
+            // Persist immediately — don't require Save & Reconnect
+            localStorage.setItem('candidateLabelOverride', val);
+            console.log(`[UI] Dropdown: Candidate locked to "${val}"`);
+            this.updateStatus(`Speaker ${val} = Candidate. Save & Reconnect to apply fully.`, 'ok');
+        };
+    }
+
     const mToggle = document.getElementById('modelToggle');
     if (!mToggle) return;
     const isFree = mToggle.checked;
@@ -357,12 +406,17 @@ class AppController {
   }
 
   updateDiarizationUI() {
-    const isCandidate = this.state.isHolding || this.state.matchConfidence > this.state.voiceThreshold;
+    const isCandidate = this.state.matchConfidence > this.state.voiceThreshold;
     const dot = document.getElementById('statusDot');
     const appStatusText = document.getElementById('appStatusText');
 
-    if (dot) dot.style.background = isCandidate ? '#3b82f6' : '#f59e0b';
-    if (appStatusText) {
+    // Only update the dot color if we aren't showing an error/warning
+    if (dot && this.state.lastStatusType !== 'error' && this.state.lastStatusType !== 'warn') {
+        dot.style.background = isCandidate ? '#3b82f6' : '#f59e0b';
+    }
+    
+    // Only update text if the system is in a normal operating state ('ok')
+    if (appStatusText && this.state.lastStatusType === 'ok') {
       appStatusText.textContent = isCandidate ? "CANDIDATE" : "INTERVIEWER";
     }
   }
@@ -382,7 +436,7 @@ class AppController {
         this.state.calibrationLabels.push(rawLabel);
     }
 
-    let isCandidate = this.state.isHolding;
+    let isCandidate = false;
     
     if (!isCandidate) {
       if (this.state.isAssemblyMode) {
@@ -399,19 +453,6 @@ class AppController {
     }
     
     const role = isCandidate ? 'candidate' : 'interviewer';
-    
-    // Auto-learn the mapping for the first time if not yet assigned
-    const hasLabel = rawLabel !== null && rawLabel !== undefined;
-    if (this.state.isAssemblyMode && hasLabel) {
-        if (this.state.speakerMapping.candidate === null && isCandidate) {
-            this.state.speakerMapping.candidate = rawLabel;
-            console.log(`[UI] Learned candidate label: ${rawLabel}`);
-        } else if (this.state.speakerMapping.interviewer === null && !isCandidate) {
-            this.state.speakerMapping.interviewer = rawLabel;
-            console.log(`[UI] Learned interviewer label: ${rawLabel}`);
-        }
-    }
-
     this.addTranscriptEntry(text, role, rawLabel);
 
     if (!isCandidate) {
@@ -420,35 +461,32 @@ class AppController {
   }
 
   determineSpeakerIdentity(rawLabel) {
-    if (rawLabel === null || rawLabel === undefined) {
-        // Temporal Persistence: If label is missing, check if someone spoke in the last 2 seconds.
-        const history = this.state.conversationHistory;
-        const lastEntry = history.length > 0 ? history[history.length - 1] : null;
-        if (lastEntry && (Date.now() - (lastEntry.timestamp || 0)) < 2000) {
-            return lastEntry.role === 'user';
-        }
-        return false;
+    if (rawLabel === null || rawLabel === undefined) return false;
+
+    const labelStr = String(rawLabel).trim().toUpperCase();
+    const mappedCandidate = this.state.speakerMapping.candidate
+        ? String(this.state.speakerMapping.candidate).toUpperCase()
+        : null;
+
+    // Always log so we can debug in browser console
+    console.log(`[IDENTITY] rawLabel="${labelStr}" | mappedCandidate="${mappedCandidate}"`);
+
+    // If user explicitly mapped a candidate label, use it as gospel
+    if (mappedCandidate !== null) {
+      const result = labelStr === mappedCandidate;
+      console.log(`[IDENTITY] Explicit match check: "${labelStr}" === "${mappedCandidate}" → ${result}`);
+      return result;
     }
 
-    // 1. Check manual override/mapping first
-    if (this.state.speakerMapping.candidate) {
-      return rawLabel === this.state.speakerMapping.candidate;
+    // No mapping — use voice signature as POSITIVE confirmation only
+    if (this.state.userVoiceSignature && this.state.calibrationComplete
+        && this.state.matchConfidence > this.state.voiceThreshold) {
+      this.state.speakerMapping.candidate = labelStr;
+      console.log(`[IDENTITY] Voice match: auto-mapping "${labelStr}" as Candidate.`);
+      return true;
     }
 
-    // 2. Use voice signature if available and calibration is done
-    if (this.state.userVoiceSignature && this.state.calibrationComplete) {
-      const isVoiceMatch = this.state.matchConfidence > this.state.voiceThreshold;
-      if (isVoiceMatch) {
-          // Opportunistically learn this label as candidate
-          this.state.speakerMapping.candidate = rawLabel;
-          console.log(`[UI] Auto-assigned candidate label from voice match: ${rawLabel}`);
-          return true;
-      }
-    }
-
-    // 3. Fallback: If we haven't identified the candidate yet, 
-    // we assume new speakers are interviewers until proven otherwise.
-    // This prioritizes triggering the AI.
+    console.log(`[IDENTITY] No mapping — defaulting to Interviewer.`);
     return false;
   }
 
@@ -480,7 +518,14 @@ class AppController {
         hist.lastElementChild.textContent = `${lastHumanEntry.content} [ID: ${idTag}]`;
         hist.scrollTop = hist.scrollHeight;
       }
-      
+      // Mirror merged interviewer update to HUD chat
+      if (aiRole === 'interviewer') {
+        const hudHist = document.getElementById('hudChatMessages');
+        if (hudHist && hudHist.lastElementChild) {
+          hudHist.lastElementChild.textContent = lastHumanEntry.content;
+          hudHist.scrollTop = hudHist.scrollHeight;
+        }
+      }
       // Wipe trailing assistant messages so the context remains contiguous for the final AI trigger
       while (history.length > 0 && history[history.length - 1].role === 'assistant') {
           history.pop();
@@ -502,13 +547,25 @@ class AppController {
     p.dataset.index = entryIndex; // Store index for toggling
     p.onclick = () => this.toggleEntryRole(entryIndex, p);
 
-    const idTag = (rawLabel !== null && rawLabel !== undefined) ? rawLabel : (this.state.isAssemblyMode ? 'A' : 'Local');
+    const idTag = (rawLabel !== null && rawLabel !== undefined) ? rawLabel : '?';
     p.textContent = `${text} [ID: ${idTag}]`;
 
     const hist = document.getElementById('transcriptHistory');
     if (hist) {
       hist.appendChild(p);
       hist.scrollTop = hist.scrollHeight;
+    }
+
+    // Mirror interviewer messages to HUD chat (coding mode sidebar)
+    if (role === 'interviewer') {
+      const hudChat = document.getElementById('hudChatMessages');
+      if (hudChat) {
+        const hudP = document.createElement('p');
+        hudP.className = 'transcript-entry interviewer';
+        hudP.textContent = text;
+        hudChat.appendChild(hudP);
+        hudChat.scrollTop = hudChat.scrollHeight;
+      }
     }
   }
 
@@ -537,6 +594,12 @@ class AppController {
         }
         console.log(`[UI] Identity Healed: Speaker ${rawLabel} is now ${uiRole}`);
         this.updateStatus(`Learned Speaker ${rawLabel} as ${uiRole}`, 'ok');
+
+        // Sync back to the settings dropdown if available
+        const sLabel = document.getElementById('candidateSpeaker');
+        if (sLabel && newRole === 'user') {
+            sLabel.value = String(rawLabel).toUpperCase();
+        }
     }
 
     // Refire AI after correction (debounced)
@@ -575,16 +638,26 @@ class AppController {
   }
 
   updateStatus(text, type) {
+    this.state.lastStatusType = type || 'info';
     const appStatusText = document.getElementById('appStatusText');
     const dot = document.getElementById('statusDot');
-    if (appStatusText) appStatusText.textContent = text.toUpperCase();
+    let displayText = text;
+    if (type === 'error' && text.length > 30) {
+        const match = text.match(/\d{3}/);
+        displayText = match ? `ERROR ${match[0]}` : text.substring(0, 30) + '...';
+    }
+
+    if (appStatusText) appStatusText.textContent = displayText.toUpperCase();
+    
+    // Apply full error tooltip to the entire container for easier access
+    const statusContainer = document.querySelector('.status-indicator');
+    if (statusContainer) statusContainer.title = text;
+
     if (dot) {
       if (type === 'error') dot.style.background = '#ef4444';
       else if (type === 'ok') dot.style.background = '#10b981';
       else if (type === 'warn') dot.style.background = '#f59e0b';
       else dot.style.background = '#475569';
-      
-      dot.title = text; // Tooltip for full error
     }
   }
 
@@ -597,16 +670,39 @@ class AppController {
   }
 
   handleAIResponse(text) {
-    const el = document.getElementById('teleprompterContent');
-    if (el) {
-        // Use marked.js for premium formatting (code blocks, bold, etc.)
-        if (window.marked) {
-            el.innerHTML = marked.parse(text);
-        } else {
-            el.textContent = text;
+    if (this.state.currentMode === 'coding') {
+        const { codeOnly, explanation } = this._splitCodeExplanation(text);
+
+        // Code blocks → Solution panel (editor-style)
+        const hudEl = document.getElementById('hudSolutionContent');
+        if (hudEl) {
+            if (codeOnly) {
+                hudEl.innerHTML = window.marked ? marked.parse(codeOnly) : `<pre><code>${codeOnly}</code></pre>`;
+            } else {
+                hudEl.innerHTML = `<span style="color:var(--text-muted);opacity:0.5;font-style:italic;font-size:0.75em;">No code block returned. See chat for explanation.</span>`;
+            }
+            hudEl.scrollTop = 0;
         }
+
+        // Prose explanation → HUD Chat as an AI bubble
+        if (explanation) {
+            const hudChat = document.getElementById('hudChatMessages');
+            if (hudChat) {
+                const aiEntry = document.createElement('p');
+                aiEntry.className = 'transcript-entry hud-ai-note';
+                aiEntry.innerHTML = explanation; // Injected as HTML (already parsed)
+                hudChat.appendChild(aiEntry);
+                hudChat.scrollTop = hudChat.scrollHeight;
+            }
+        }
+    } else {
+        // Voice mode: render into the teleprompter as before
+        const el = document.getElementById('teleprompterContent');
+        if (el) {
+            el.innerHTML = window.marked ? marked.parse(text) : text;
+        }
+        this.state.conversationHistory.push({ role: 'assistant', content: text });
     }
-    this.state.conversationHistory.push({ role: 'assistant', content: text });
 
     const dot = document.getElementById('statusDot');
     const loader = document.getElementById('loader');
@@ -621,6 +717,39 @@ class AppController {
     const loader = document.getElementById('loader');
     if (dot) dot.classList.remove('pulse-generating');
     if (loader) loader.style.display = 'none';
+  }
+
+  /**
+   * Splits an AI response into code blocks and prose explanation.
+   * Code blocks (``` ... ```) go to the solution panel; prose goes to the chat.
+   */
+  _splitCodeExplanation(text) {
+    const codeBlockRegex = /```(?:[a-z]*\n)?([\s\S]*?)```/g;
+    const blocks = [];
+    let match;
+    
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      blocks.push(match[1].trim());
+    }
+
+    // If no backticks were found, assume the AI just dumped code (safety fallback)
+    if (blocks.length === 0) {
+        return {
+            codeOnly: text.trim(),
+            explanation: "*(AI provided code without markdown wrappers)*"
+        };
+    }
+
+    const codeOnly = blocks.join('\n\n/* --- Next Block --- */\n\n');
+    const explanation = text
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    return {
+      codeOnly,
+      explanation: window.marked ? marked.parse(explanation) : explanation
+    };
   }
 
   // --- Voice Calibration ---
@@ -639,6 +768,11 @@ class AppController {
     this.state.calibrationLabels = [];
     const DURATION = 10000;
     const start = Date.now();
+    
+    // Ensure STT is active so we can capture labels
+    if (this.stt && this.stt.isPaused) {
+        this.togglePause();
+    }
 
     const iv = setInterval(() => {
       if (!this.state.isCalibrating) { clearInterval(iv); return; }
@@ -647,8 +781,15 @@ class AppController {
       const remaining = Math.max(0, (DURATION - elapsed) / 1000);
       if (timer) timer.textContent = remaining.toFixed(1) + 's';
       if (bar) bar.style.width = (elapsed / DURATION * 100) + '%';
+      const rms = this.audio.getRMS();
+      const vMeter = document.getElementById('volumeMeter');
+      if (vMeter) {
+          const volPct = Math.min(100, (rms / 40) * 100);
+          vMeter.style.width = volPct + '%';
+          vMeter.style.background = rms > 12 ? '#10b981' : '#475569';
+      }
 
-      if (this.audio.getRMS() > 20) {
+      if (rms > 12) {
         samples.push(this.audio.getFingerprint());
       }
 
@@ -723,8 +864,12 @@ class AppController {
     if (h) h.innerHTML = '';
     const tc = document.getElementById('teleprompterContent');
     if (tc) tc.innerHTML = '<span class="placeholder-text">Waiting for interviewer...</span>';
+    // Also reset HUD coding panels
+    const hc = document.getElementById('hudChatMessages');
+    if (hc) hc.innerHTML = '';
+    const hs = document.getElementById('hudSolutionContent');
+    if (hs) hs.innerHTML = '<span style="color:var(--text-muted);opacity:0.4;font-style:italic;font-size:0.75em;">Capture a screenshot to solve...</span>';
   }
-  setHolding(val) { this.state.isHolding = val; }
 
   saveSettings() {
     console.log("Saving settings...");
@@ -736,7 +881,7 @@ class AppController {
       'noiseFloorThreshold': 'noiseFloor',
       'selectedFreeModel': 'freeModel',
       'selectedPaidModel': 'paidModel',
-      'candidateLabelOverride': 'candidateLabelOverride'
+      'candidateLabelOverride': 'candidateSpeaker'
     };
 
     for (const [storeKey, elId] of Object.entries(vals)) {

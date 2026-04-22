@@ -16,15 +16,36 @@
       <aside class="sidebar-panel">
         <div class="sidebar-header">
           <span class="panel-title">TRANSCRIPT</span>
-          <button class="btn-hide" id="btnHideSidebar">Hide</button>
         </div>
         <div class="transcript-panel" id="transcriptContainer">
           <div class="transcript-history teleprompter-scroll" id="transcriptHistory"></div>
           <div class="interim-text" id="interimText"></div>
         </div>
       </aside>
+      <!-- Coding HUD Sidebar: direct grid child so it occupies column 1 -->
+      <div class="hud-sidebar" id="hudSidebar" style="display:none;">
+        <!-- Sidebar header -->
+        <div class="hud-header">
+          <span class="hud-chat-label">CHAT</span>
+        </div>
+        <div class="hud-chat-messages" id="hudChatMessages"></div>
+
+        <div class="hud-divider">
+          <span class="hud-divider-label">&#x25CF; SOLUTION</span>
+        </div>
+
+        <!-- AI Solution Box -->
+        <div class="hud-solution">
+          <div class="hud-solution-content" id="hudSolutionContent">
+            <span style="color:var(--text-muted);opacity:0.4;font-style:italic;font-size:0.75em;">Capture a screenshot to solve...</span>
+          </div>
+        </div>
+      </div>
 
       <section class="main-content-panel">
+        <button class="btn-sidebar-toggle" id="btnHideSidebar" title="Toggle Sidebar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        </button>
         <!-- Voice Teleprompter Mode -->
         <div class="teleprompter-panel" id="teleprompterPanel">
           <div class="loader" id="loader"></div>
@@ -33,13 +54,18 @@
           </div>
         </div>
 
-        <!-- Coding Camera Mode (Hidden by default) -->
+        <!-- Coding Viewfinder -->
         <div class="camera-panel" id="cameraPanel" style="display: none;">
-           <video id="cameraFeed" autoplay playsinline></video>
-           <div class="camera-overlay">
-             <button id="btnCaptureCode" class="btn-primary-action">📸 Take Photo (<span id="photoCount">0</span>)</button>
-             <button id="btnSolveCode" class="btn-primary-action success" style="display: none;">🚀 Submit Challenge</button>
-           </div>
+          <video id="cameraFeed" autoplay playsinline></video>
+          <!-- Floating controls overlay -->
+          <div class="camera-float-controls">
+            <div class="camera-thumbnail-strip" id="cameraThumbnailStrip"></div>
+            <div class="camera-float-buttons">
+              <button class="btn-float-cycle" id="btnHudToggle" title="Cycle layout">⇔</button>
+              <button class="btn-float-capture" id="btnHudCapture">📸 Capture (<span id="hudPhotoCount">0</span>)</button>
+              <button class="btn-float-solve" id="btnHudSolve" style="display:none;">🚀 Solve</button>
+            </div>
+          </div>
         </div>
       </section>
     </main>
@@ -103,14 +129,13 @@
       <div class="calibration-progress-container">
         <div class="calibration-progress-bar" id="calibrationProgress"></div>
       </div>
+      <div class="volume-meter-container">
+        <div class="volume-meter-bar" id="volumeMeter"></div>
+      </div>
       <div class="calibration-timer" id="calibrationTimer">10.0s</div>
-      <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.5rem;">Tip: You can also hold the button below while speaking to auto-calibrate.</p>
       <button class="btn-save secondary" id="btnCancelCalibration" style="margin-top:1rem;">Cancel</button>
     </div>
   </div>
-
-
-
 
   <div class="modal-overlay" id="settingsModal">
     <div class="modal">
@@ -169,12 +194,17 @@
         <input type="range" id="noiseFloor" min="0" max="50" step="1" value="12">
       </div>
       <div class="form-group">
-        <label for="candidateLabelOverride">Candidate Speaker Label:</label>
-        <select id="candidateLabelOverride" class="settings-select">
+        <label for="candidateSpeaker">Candidate Speaker Label:</label>
+        <select id="candidateSpeaker" class="settings-select">
           <option value="auto">Auto-detect (default)</option>
+          <option value="0">Speaker 0</option>
+          <option value="1">Speaker 1</option>
+          <option value="2">Speaker 2</option>
+          <option value="3">Speaker 3</option>
           <option value="A">Speaker A</option>
           <option value="B">Speaker B</option>
           <option value="C">Speaker C</option>
+          <option value="D">Speaker D</option>
         </select>
       </div>
       <button id="btnCalibrate" class="btn-save secondary" style="margin-top:0;">Recalibrate Voice Signature</button>
@@ -200,7 +230,6 @@
   <div id="toast" class="toast">History Cleared</div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script type="module" src="js/ui.js"></script>
 </body>
 </html>

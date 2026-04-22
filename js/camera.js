@@ -30,35 +30,18 @@ export class CameraManager {
         }
     }
 
-    async captureAndOCR(onStatusCb) {
+    /**
+     * Captures the current video frame and returns it as a Base64 JPEG data URL.
+     * @returns {string|null} Base64 data URL or null if no stream is active.
+     */
+    captureBase64() {
         if (!this.videoEl || !this.stream) return null;
         const w = this.videoEl.videoWidth || 1280;
         const h = this.videoEl.videoHeight || 720;
         this.canvas.width = w;
         this.canvas.height = h;
-        const ctx = this.canvas.getContext('2d');
-        ctx.drawImage(this.videoEl, 0, 0, w, h);
-
-        if (typeof Tesseract === 'undefined') {
-            if (onStatusCb) onStatusCb("Tesseract library missing.", "error");
-            return null;
-        }
-
-        if (onStatusCb) onStatusCb("Scanning image (OCR)...", "");
-        try {
-            const { data: { text } } = await Tesseract.recognize(this.canvas, 'eng', {
-                logger: m => {
-                    if (m.status === 'recognizing text' && onStatusCb) {
-                        onStatusCb(`Scanning... ${Math.round(m.progress * 100)}%`, '');
-                    }
-                }
-            });
-            if (onStatusCb) onStatusCb("Scan complete. Solving...", "ok");
-            return text;
-        } catch (e) {
-            console.error("OCR Failed:", e);
-            if (onStatusCb) onStatusCb("OCR Failed", "error");
-            return null;
-        }
+        this.canvas.getContext('2d').drawImage(this.videoEl, 0, 0, w, h);
+        // Return full data URL; ai.js will strip the prefix for the API payload
+        return this.canvas.toDataURL('image/jpeg', 0.85);
     }
 }

@@ -24,3 +24,6 @@ build/
 # --- Project Specific ---
 *.bat
 # (Keeping .md files as they are useful for auditors)
+
+# Local Netlify folder
+.netlify

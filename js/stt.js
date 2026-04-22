@@ -40,6 +40,7 @@ export class STTManager {
         speech_model: 'u3-rt-pro',
         sample_rate: '16000',
         speaker_labels: 'true',
+        language_code: 'en',
         punctuate: 'true',
         format_text: 'true',
         // DEPENDENCY: This must match the output format of audio-worklet-processor.js
@@ -94,8 +95,8 @@ export class STTManager {
 
     // Extract the new v3 payload structure
     const transcript = msg.transcript || "";
-    const isFinal = msg.end_of_turn === true;
-    const rawLabel = msg.speaker; // v3 uses 'speaker' instead of 'speaker_label'
+    const isFinal = msg.end_of_turn === true || msg.message_type === 'FinalTranscript';
+    const rawLabel = msg.speaker !== undefined ? msg.speaker : msg.speaker_label;
 
     // Log to verify data flow (check browser console after deployment)
     console.log(`[STT] v3 Turn received: end_of_turn=${isFinal}, text="${transcript}", speaker=${rawLabel}`);
