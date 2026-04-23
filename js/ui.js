@@ -48,7 +48,8 @@ class AppController {
       calibrationComplete: StorageService.get(StorageService.KEYS.USER_VOICE_SIGNATURE, null) !== null,
       fontSize: StorageService.get(StorageService.KEYS.FONT_SIZE, 24),
       lastStatusType: 'ok',
-      currentMode: 'voice' // Default mode
+      currentMode: 'voice', // Default mode
+      lastCapturedImage: null // Buffer for multimodal AI
     };
 
     // 3. Services
@@ -420,20 +421,27 @@ class AppController {
   // --- HUD / Coding Mode Methods ---
   handleCaptureCode() {
     this.updateStatus('loading', 'Capturing...');
-    this.camera.captureAndOCR().then(text => {
-      const el = document.getElementById('hudSolutionContent');
-      if (el) el.textContent = text;
-      this.updateStatus('ok', 'Captured');
-    }).catch(err => {
+    const base64 = this.camera.captureBase64();
+    
+    if (base64) {
+      this.state.lastCapturedImage = base64;
+      this.updateStatus('ok', 'Image Captured');
+      // Visual feedback: show a preview or just update status
+      console.log('[UI] Image buffered for next AI request');
+    } else {
       this.updateStatus('error', 'Capture Failed');
-    });
+    }
   }
 
   handleSolveCode() {
-    const code = document.getElementById('hudSolutionContent').textContent;
-    if (!code) return;
+    const code = document.getElementById('hudSolutionContent').textContent || '';
     this.updateStatus('loading', 'Solving...');
-    this.ai.generateResponse("Solve this coding problem", code);
+    
+    // Pass the buffered image to the AI service
+    this.ai.generateResponse("Please analyze this code/image and suggest a solution.", code, this.state.lastCapturedImage);
+    
+    // Clear buffer after sending
+    this.state.lastCapturedImage = null;
   }
 
   cycleHudLayout() {

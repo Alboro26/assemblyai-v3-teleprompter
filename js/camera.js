@@ -46,24 +46,4 @@ export class CameraManager {
         this.canvas.getContext('2d').drawImage(this.videoEl, 0, 0, w, h);
         return this.canvas.toDataURL('image/jpeg', 0.85);
     }
-
-    /**
-     * Captures frame and sends to OCR proxy.
-     */
-    async captureAndOCR() {
-        const base64 = this.captureBase64();
-        if (!base64) throw new Error('No frame available');
-        
-        // Strip data URL prefix
-        const b64Data = base64.split(',')[1];
-        
-        const res = await fetch('/.netlify/functions/ocr-proxy', {
-            method: 'POST',
-            body: JSON.stringify({ image: b64Data })
-        });
-        
-        if (!res.ok) throw new Error('OCR request failed');
-        const data = await res.json();
-        return data.text || '';
-    }
 }
