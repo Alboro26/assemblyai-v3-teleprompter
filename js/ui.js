@@ -437,12 +437,21 @@ class AppController {
 
   handleSolveCode() {
     const code = document.getElementById('hudSolutionContent').textContent || '';
+    if (!code && !this.state.lastCapturedImage) {
+      this.updateStatus('warn', 'Nothing to solve');
+      return;
+    }
+    
     this.updateStatus('loading', 'Solving...');
     
-    // Pass the actual prompt and code context correctly
     const jobDesc = StorageService.get(StorageService.KEYS.JOB_DESCRIPTION, 'General Interview');
     const resumeText = StorageService.get(StorageService.KEYS.RESUME_TEXT, '');
-    const userPrompt = `Analyze this code and suggest a solution: ${code}`;
+    
+    // If we have an image, the prompt focuses on vision analysis. 
+    // If not, it's a standard text-based solution request.
+    const userPrompt = this.state.lastCapturedImage 
+      ? `Analyze this code and suggest a solution: ${code}`
+      : `Solve this coding problem: ${code}`;
 
     this.ai.generateResponse(jobDesc, resumeText, this.state.lastCapturedImage, userPrompt);
     
