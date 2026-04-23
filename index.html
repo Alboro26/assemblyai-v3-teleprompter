@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -7,10 +8,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Interview Teleprompter</title>
   <link rel="manifest" href="manifest.json">
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;600;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
   <link rel="stylesheet" href="css/app.css">
 </head>
+
 <body>
   <div class="app-container">
     <main class="dashboard-grid">
@@ -38,20 +43,25 @@
         <!-- AI Solution Box -->
         <div class="hud-solution">
           <div class="hud-solution-content" id="hudSolutionContent">
-            <span style="color:var(--text-muted);opacity:0.4;font-style:italic;font-size:0.75em;">Capture a screenshot to solve...</span>
+            <span style="color:var(--text-muted);opacity:0.4;font-style:italic;font-size:0.75em;">Capture a screenshot
+              to solve...</span>
           </div>
         </div>
       </div>
 
       <section class="main-content-panel">
         <button class="btn-sidebar-toggle" id="btnHideSidebar" title="Toggle Sidebar">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
         </button>
         <!-- Voice Teleprompter Mode -->
         <div class="teleprompter-panel" id="teleprompterPanel">
           <div class="loader" id="loader"></div>
           <div class="teleprompter-content" id="teleprompterContent">
-            <span class="placeholder-text">Ready for your interview. Start speaking and I'll generate answers for you.</span>
+            <span class="placeholder-text">Ready for your interview. Start speaking and I'll generate answers for
+              you.</span>
           </div>
         </div>
 
@@ -63,7 +73,8 @@
             <div class="camera-thumbnail-strip" id="cameraThumbnailStrip"></div>
             <div class="camera-float-buttons">
               <button class="btn-float-cycle" id="btnHudToggle" title="Cycle layout">⇔</button>
-              <button class="btn-float-capture" id="btnHudCapture">📸 Capture (<span id="hudPhotoCount">0</span>)</button>
+              <button class="btn-float-capture" id="btnHudCapture">📸 Capture (<span
+                  id="hudPhotoCount">0</span>)</button>
               <button class="btn-float-solve" id="btnHudSolve" style="display:none;">🚀 Solve</button>
             </div>
           </div>
@@ -86,39 +97,69 @@
       <div class="bar-center">
         <div class="mode-switcher">
           <button id="btnVoiceMode" class="mode-tab active">
-             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
-             Voice
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+            </svg>
+            Voice
           </button>
           <button id="btnCodingMode" class="mode-tab">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+              <circle cx="12" cy="13" r="3" />
+            </svg>
             Camera
           </button>
         </div>
         <button class="footer-btn action-btn" id="pauseBtn" title="Pause/Resume">
-          <svg id="svgPause" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-          <svg id="svgPlay" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <svg id="svgPause" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="4" width="4" height="16" />
+            <rect x="14" y="4" width="4" height="16" />
+          </svg>
+          <svg id="svgPlay" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
         </button>
       </div>
 
       <div class="bar-right">
-         <div class="font-controls">
-           <button class="footer-btn" id="btnFontDec">
-             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-           </button>
-           <span class="font-display" id="fontSizeDisplay">24px</span>
-           <button class="footer-btn" id="btnFontInc">
-             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-           </button>
-         </div>
-         <button class="footer-btn icon-only" id="btnInspectContext" title="Show Context">
-           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-         </button>
-         <button class="footer-btn icon-only" id="btnClear" title="Clear History">
-           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6L18.1 20.3C18.1 21.2 17.3 22 16.4 22H7.6C6.7 22 5.9 21.2 5.9 20.3L5 6"/><path d="M10 11V17"/><path d="M14 11V17"/><path d="M9 6V4C9 3.1 9.7 2.3 10.6 2.3H13.4C14.3 2.3 15 3.1 15 4V6"/></svg>
-         </button>
-         <button class="footer-btn icon-only" id="btnSettings" title="Settings">
-           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-         </button>
+        <div class="font-controls">
+          <button class="footer-btn" id="btnFontDec">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+          <span class="font-display" id="fontSizeDisplay">24px</span>
+          <button class="footer-btn" id="btnFontInc">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </div>
+        <button class="footer-btn icon-only" id="btnInspectContext" title="Show Context">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+        <button class="footer-btn icon-only" id="btnClear" title="Clear History">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6L18.1 20.3C18.1 21.2 17.3 22 16.4 22H7.6C6.7 22 5.9 21.2 5.9 20.3L5 6" />
+            <path d="M10 11V17" />
+            <path d="M14 11V17" />
+            <path d="M9 6V4C9 3.1 9.7 2.3 10.6 2.3H13.4C14.3 2.3 15 3.1 15 4V6" />
+          </svg>
+        </button>
+        <button class="footer-btn icon-only" id="btnSettings" title="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </div>
     </footer>
   </div>
@@ -126,7 +167,8 @@
   <div class="calibration-overlay" id="calibrationOverlay">
     <div class="calibration-card">
       <h2>Voice Calibration</h2>
-      <p>Speak naturally for 10 seconds. This teaches the app to recognize <strong>your</strong> voice as the candidate.</p>
+      <p>Speak naturally for 10 seconds. This teaches the app to recognize <strong>your</strong> voice as the candidate.
+      </p>
       <div class="calibration-progress-container">
         <div class="calibration-progress-bar" id="calibrationProgress"></div>
       </div>
@@ -144,9 +186,9 @@
       <p class="section-label">Model Mode</p>
       <div class="form-group">
         <div class="switch-container">
-           <label class="switch-label" id="labelPaid" for="modelToggle">Paid Mode</label>
-           <input type="checkbox" id="modelToggle" class="hidden-checkbox">
-           <label class="switch-label" id="labelFree" for="modelToggle">Free Mode</label>
+          <label class="switch-label" id="labelPaid" for="modelToggle">Paid Mode</label>
+          <input type="checkbox" id="modelToggle" class="hidden-checkbox">
+          <label class="switch-label" id="labelFree" for="modelToggle">Free Mode</label>
         </div>
       </div>
 
@@ -181,7 +223,7 @@
           <option value="openai/gpt-4o-mini">OpenAI: GPT-4o Mini</option>
         </select>
       </div>
-      
+
       <div class="form-group">
         <label for="aiDelay">AI trigger delay: <span id="delayDisplay" class="delay-value">2.0</span>s</label>
         <input type="range" id="aiDelay" min="0.5" max="5.0" step="0.1" value="2.0">
@@ -218,7 +260,8 @@
     <div class="modal" style="max-width: 800px;">
       <h2>Raw AI Context</h2>
       <pre id="inspectorContent" class="inspector-pre"></pre>
-      <button class="btn-save secondary" onclick="document.getElementById('inspectorModal').classList.remove('active')">Close</button>
+      <button class="btn-save secondary"
+        onclick="document.getElementById('inspectorModal').classList.remove('active')">Close</button>
     </div>
   </div>
 
@@ -232,6 +275,8 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
   <script type="module" src="js/ui.js"></script>
 </body>
+
 </html>
