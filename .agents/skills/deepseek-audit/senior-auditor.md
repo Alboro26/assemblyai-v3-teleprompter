@@ -1,31 +1,27 @@
 ---
-name: deepseek-audit
-description: Uses the DeepSeek Web Chat (via Browser) to conduct rigorous code audits by interacting with the web interface. This bypasses API credit limits.
+name: senior-auditor
+description: Formalizes the "Expert-Builder" protocol. The user provides high-reasoning audit text (from DeepSeek Expert), and the agent executes it with 100% precision.
 ---
 
-# DeepSeek Senior Code Auditor (Browser Edition)
+# Senior Auditor Protocol (Expert-Builder Edition)
 
 ## Purpose
-Use this skill when the user requests a "code audit", "security review", or "architectural feedback". It uses the browser subagent to interact with the DeepSeek web chat for free, high-reasoning analysis.
+Use this protocol when performing complex architectural changes, security hardening, or refactoring. This method leverages DeepSeek for "Thinking" and Gemini Flash for "Executing," ensuring high reliability with low token cost.
 
-## Instructions
-1.  **Gather Context**: Identify the GitHub repository URL and branch (e.g., `https://github.com/Alboro26/assemblyai-v3-teleprompter` branch `refactor/audit-cleanup`).
-2.  **Prepare the Prompt**:
-    - Ask DeepSeek to act as a Senior Software Architect.
-    - Provide the GitHub URL and branch.
-    - Explicitly ask it to audit for bugs, security (XSS), and architectural patterns.
-3.  **Execute via Browser**:
-    - Use the `browser_subagent` tool.
-    - Navigate to `https://chat.deepseek.com/`.
-    - **Crucial**: Ensure "DeepSeek-V3" or "DeepSeek-Reasoner" is selected in the UI.
-    - Paste the prompt and wait for the full response.
-    - Copy the response text and return it.
-
-4.  **Handoff Protocol**:
-    - Summarize the browser findings into "🔴 Critical Issues", "🟡 Improvements", and "🟢 Best Practices".
-    - Convert findings into a `task.md` file in the project root.
-    - Ask the user for approval to execute.
+## The Handoff Workflow
+1.  **Expert Input**: The user provides the architectural "Master Plan" (usually extracted from DeepSeek Reasoner via API or Web Chat).
+2.  **The Builder's Oath**: The agent (Builder) must strictly follow the Expert's recommendations. **Do not over-engineer or deviate** unless a technical blocker is found.
+3.  **Task Creation**: The agent must immediately convert the Expert's plan into a `task.md` file in the project root.
+4.  **Atomic Execution**:
+    - Implement changes one file at a time.
+    - Check for syntax/integrity after each major step.
+    - Commit and Push frequently to keep the branch stable.
 
 ## Best Practices
-- **Paste Code if Necessary**: If the repo is large or the web chat fails to browse, paste the specific file contents (e.g., `StorageService.js`) into the chat as well.
-- **Verification**: Verify that the browser actually loaded the content before extracting the report.
+- **No Browser Loops**: Avoid using the browser subagent for DeepSeek unless explicitly asked; manual copy-paste of the expert text is 100x faster and avoids CAPTCHAs.
+- **Precision**: If the Expert provides code snippets, use them exactly.
+- **Verification**: Always run `node --check` or equivalent syntax validation before reporting "Done".
+
+## Naming Conventions
+- **Events**: Namespace all EventBus events (e.g., `stt:final`, `ai:response`).
+- **Services**: Group logical units in `js/services/`.

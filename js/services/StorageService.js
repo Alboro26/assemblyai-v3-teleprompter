@@ -65,6 +65,8 @@ export class StorageService {
         }
     }
 
+    static MAX_HISTORY_LIMIT = 50;
+
     /**
      * Set a value in localStorage.
      * @param {string} key - Storage key.
@@ -72,7 +74,16 @@ export class StorageService {
      */
     static set(key, value) {
         try {
-            localStorage.setItem(key, JSON.stringify(value));
+            let dataToStore = value;
+
+            // Robustness: Prune history on write to prevent quota overflow
+            if (key === this.KEYS.CONVERSATION_HISTORY && Array.isArray(value)) {
+                if (value.length > this.MAX_HISTORY_LIMIT) {
+                    dataToStore = value.slice(-this.MAX_HISTORY_LIMIT);
+                }
+            }
+
+            localStorage.setItem(key, JSON.stringify(dataToStore));
         } catch (error) {
             console.error(`StorageService: Error saving ${key}`, error);
         }

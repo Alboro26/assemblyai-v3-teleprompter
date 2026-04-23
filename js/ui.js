@@ -55,19 +55,31 @@ class AppController {
     this.ai = new AIService();
     this.audio = new AudioEngine();
     this.stt = new STTManager(this.eventBus);
-    this.camera = new CameraManager();
+    this.camera = new CameraManager(document.getElementById('cameraFeed'));
 
     // 4. Wire up Event Bus
+    this._unsubscribers = [];
     this.setupSubscriptions();
 
     this.init();
   }
 
   setupSubscriptions() {
-    this.eventBus.on('stt:interim', (text) => this.updateInterim(text));
-    this.eventBus.on('stt:final', (data) => this.handleFinalTranscript(data));
-    this.eventBus.on('ai:response', (text) => this.handleAIResponse(text));
-    this.eventBus.on('status:change', (status) => this.updateStatus(status.type, status.text));
+    const unsub = [
+      this.eventBus.on('stt:interim', (text) => this.handleInterim(text)),
+      this.eventBus.on('stt:final', (data) => this.handleFinalTranscript(data)),
+      this.eventBus.on('ai:response', (text) => this.handleAIResponse(text)),
+      this.eventBus.on('status:change', (status) => this.updateStatus(status.type, status.text))
+    ];
+    this._unsubscribers.push(...unsub);
+  }
+
+  destroy() {
+    this.audio?.stop();
+    this.stt?.stopAll();
+    this.camera?.stop();
+    this._unsubscribers.forEach(fn => fn());
+    this._unsubscribers = [];
   }
 
   async init() {
@@ -75,9 +87,12 @@ class AppController {
     this.loadConfig();
     this.updateStatus('ok', 'Ready');
     
-    // Initial model fetch & population
-    await this.modelManager.fetchModels();
-    this.populateModelDropdowns();
+    // Parallelize: Don't block UI/Audio on model fetch
+    this.modelManager.fetchModels().then(() => {
+      this.populateModelDropdowns();
+    }).catch(err => {
+      console.warn('[UI] Model fetch failed during init:', err);
+    });
 
     // Register PWA Service Worker
     if ('serviceWorker' in navigator) {

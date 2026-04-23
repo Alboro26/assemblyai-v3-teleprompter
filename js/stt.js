@@ -1,6 +1,4 @@
-/**
- * js/stt.js - Unified Speech-to-Text Controller (PWA + AudioWorklet Edition)
- */
+import { StorageService } from './services/StorageService.js';
 
 export class STTManager {
   /**
@@ -15,6 +13,16 @@ export class STTManager {
     this.recogActive = false;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 3;
+  }
+
+  startCalibration() {
+    console.log('[STT] Calibration started (Stub)');
+    // TODO: Implement actual voice fingerprinting logic
+  }
+
+  stopCalibration() {
+    console.log('[STT] Calibration stopped (Stub)');
+    // TODO: Implement actual voice fingerprinting logic
   }
 
   setAudioEngine(engine) {

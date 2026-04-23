@@ -1,7 +1,10 @@
 export class CameraManager {
-    constructor() {
+    /**
+     * @param {HTMLVideoElement} videoEl - The video element for the feed.
+     */
+    constructor(videoEl) {
         this.stream = null;
-        this.videoEl = document.getElementById('cameraFeed');
+        this.videoEl = videoEl;
         this.canvas = document.createElement('canvas');
     }
 
@@ -41,7 +44,26 @@ export class CameraManager {
         this.canvas.width = w;
         this.canvas.height = h;
         this.canvas.getContext('2d').drawImage(this.videoEl, 0, 0, w, h);
-        // Return full data URL; ai.js will strip the prefix for the API payload
         return this.canvas.toDataURL('image/jpeg', 0.85);
+    }
+
+    /**
+     * Captures frame and sends to OCR proxy.
+     */
+    async captureAndOCR() {
+        const base64 = this.captureBase64();
+        if (!base64) throw new Error('No frame available');
+        
+        // Strip data URL prefix
+        const b64Data = base64.split(',')[1];
+        
+        const res = await fetch('/.netlify/functions/ocr-proxy', {
+            method: 'POST',
+            body: JSON.stringify({ image: b64Data })
+        });
+        
+        if (!res.ok) throw new Error('OCR request failed');
+        const data = await res.json();
+        return data.text || '';
     }
 }
