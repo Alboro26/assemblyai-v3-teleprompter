@@ -119,6 +119,11 @@ export class STTManager {
   }
 
   startWorkletStreaming() {
+    console.log('[STT] Starting Worklet Streaming check...', { 
+      hasEngine: !!this.audioEngine, 
+      hasWorklet: !!(this.audioEngine && this.audioEngine.workletNode) 
+    });
+    
     if (!this.audioEngine || !this.audioEngine.workletNode) {
       console.warn('[STT] No AudioWorklet found.');
       return;
@@ -204,12 +209,12 @@ export class STTManager {
     if (paused) this.stopAll();
   }
 
-  setEngine(mode) {
+  setEngine(mode, connect = true) {
     this.stopAll();
     if (mode === 'assembly') {
-      this.connectAssembly();
+      if (connect) this.connectAssembly();
     } else {
-      this.initLocal();
+      if (connect) this.initLocal();
     }
   }
 

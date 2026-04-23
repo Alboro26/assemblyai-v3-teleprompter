@@ -28,12 +28,15 @@ export class AudioEngine {
       
       // Load and register the AudioWorklet processor
       try {
+        console.log('[Audio] Loading Worklet Module...');
         await this.audioCtx.audioWorklet.addModule('js/audio-worklet-processor.js');
+        console.log('[Audio] Worklet Module Loaded. Creating Node...');
         this.workletNode = new AudioWorkletNode(this.audioCtx, 'audio-stream-processor', {
           numberOfInputs: 1,
           numberOfOutputs: 0,
           channelCount: 1
         });
+        console.log('[Audio] Worklet Node Created:', !!this.workletNode);
       } catch (workletErr) {
         console.error('[Audio] Worklet loading failed:', workletErr);
       }

@@ -127,7 +127,7 @@ class AppController {
 
       this._bind('btnClear', 'onclick', () => this.clearHistory());
       this._bind('btnCalibrate', 'onclick', () => this.startCalibration());
-      this._bind('btnStartSession', 'onclick', () => this.startSession());
+      this._bind('btnStartSession', 'onclick', async () => await this.startSession());
       this._bind('btnInspectContext', 'onclick', () => this.showInspector());
       this._bind('btnSaveSettings', 'onclick', () => this.saveSettings());
       this._bind('btnCancelCalibration', 'onclick', () => this.stopCalibration());
@@ -205,7 +205,7 @@ class AppController {
   loadConfig() {
     try {
       const mode = StorageService.get(StorageService.KEYS.IS_ASSEMBLY_MODE, true);
-      this.setEngine(mode ? 'assembly' : 'local', false);
+      this.setEngine(mode ? 'assembly' : 'local', false, false);
 
       const freeMode = StorageService.get(StorageService.KEYS.IS_FREE_MODE, true);
       const toggle = document.getElementById('modelToggle');
@@ -256,7 +256,7 @@ class AppController {
     this.stt.setPaused(this.state.isPaused);
   }
 
-  setEngine(mode, notify = true) {
+  setEngine(mode, notify = true, connect = true) {
     this.state.isAssemblyMode = (mode === 'assembly');
     StorageService.set(StorageService.KEYS.IS_ASSEMBLY_MODE, this.state.isAssemblyMode);
 
@@ -265,7 +265,7 @@ class AppController {
     if (btnA) btnA.classList.toggle('active', this.state.isAssemblyMode);
     if (btnL) btnL.classList.toggle('active', !this.state.isAssemblyMode);
 
-    this.stt.setEngine(mode);
+    this.stt.setEngine(mode, connect);
     if (notify) this.updateStatus('ok', `Engine: ${mode}`);
   }
 
@@ -357,11 +357,16 @@ class AppController {
     }
 
     // 2. Bridge: hand the initialized engine to STTManager
+    console.log('[UI] Bridging Audio Engine...', { hasWorklet: !!this.audio.workletNode });
     this.stt.setAudioEngine(this.audio);
 
     // 3. Now start transcription
     this.stt.start();
     this.updateStatus('ok', 'Session Started');
+
+    // 4. Dismiss the start screen
+    const overlay = document.getElementById('startOverlay');
+    if (overlay) overlay.style.display = 'none';
   }
 
   handleInterim(text) {
