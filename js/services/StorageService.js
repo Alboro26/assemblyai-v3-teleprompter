@@ -13,10 +13,12 @@ export class StorageService {
         SELECTED_PAID_MODEL: 'selectedPaidModel',
         IS_ASSEMBLY_MODE: 'isAssemblyMode',
         IS_FREE_MODE: 'isFreeMode',
+        CACHED_MODELS: 'cachedModels',
+        MODELS_LAST_FETCHED: 'modelsLastFetched',
 
         // UI Preferences
         FONT_SIZE: 'fontSize',
-        
+
         // Session Data
         CONVERSATION_HISTORY: 'conversationHistory',
         USER_VOICE_SIGNATURE: 'userVoiceSignature',
@@ -143,5 +145,9 @@ export class StorageService {
             if (raw === 'true') localStorage.setItem(key, 'true'); 
             else if (raw === 'false') localStorage.setItem(key, 'false');
         });
+
+        // Legacy cleanup: Remove old model keys from previous architecture
+        localStorage.removeItem('openrouter_models');
+        localStorage.removeItem('openrouter_models_ts');
     }
 }

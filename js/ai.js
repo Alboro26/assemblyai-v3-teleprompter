@@ -26,14 +26,15 @@ export class AIService {
    * @param {string} jobDesc 
    * @param {string} resumeText 
    * @param {string|null} imageData - Optional Base64 data URL for vision support.
+   * @param {string|null} userPrompt - Optional custom user prompt for multimodal requests.
    */
-  async generateResponse(jobDesc, resumeText, imageData = null) {
+  async generateResponse(jobDesc, resumeText, imageData = null, userPrompt = null) {
     if (this.isRunning) {
       console.warn('[AI] Request ignored: Generation already in progress.');
       return;
     }
 
-    const messages = this.buildPrompt(jobDesc, resumeText, imageData);
+    const messages = this.buildPrompt(jobDesc, resumeText, imageData, userPrompt);
     const cacheKey = JSON.stringify(messages);
     if (this.responseCache.has(cacheKey)) {
       this.callbacks.onResponse?.(this.responseCache.get(cacheKey));
@@ -71,7 +72,7 @@ export class AIService {
       : StorageService.get(StorageService.KEYS.SELECTED_PAID_MODEL, 'google/gemini-2.0-flash-001');
   }
 
-  buildPrompt(jobDesc, resumeText, imageData = null) {
+  buildPrompt(jobDesc, resumeText, imageData = null, userPrompt = null) {
     const sys = `You are a professional interview coach.
       Help the candidate respond naturally.
       Context:
@@ -83,12 +84,13 @@ export class AIService {
       ...this.conversationHistory.slice(-10) // Context window
     ];
 
-    // If image provided, inject into the LAST message or create a new user turn
+    // Multimodal handling
     if (imageData) {
+      const prompt = userPrompt || 'Analyze this image context for my interview response:';
       messages.push({
         role: 'user',
         content: [
-          { type: 'text', text: 'Analyze this image context for my interview response:' },
+          { type: 'text', text: prompt },
           { type: 'image_url', image_url: { url: imageData } }
         ]
       });

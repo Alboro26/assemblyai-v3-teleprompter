@@ -41,6 +41,10 @@ export class EventBus {
         fn(payload);
       } catch (err) {
         console.error(`[EventBus] Error in handler for "${event}":`, err);
+        // Telemetry: Emit error event for centralized monitoring
+        if (event !== 'eventbus:error') {
+          this.emit('eventbus:error', { event, error: err, payload });
+        }
       }
     });
   }

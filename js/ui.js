@@ -424,9 +424,11 @@ class AppController {
     const base64 = this.camera.captureBase64();
     
     if (base64) {
+      if (base64.length > 2000000) {
+        this.updateStatus('warn', 'Image large (2MB+). May fail.');
+      }
       this.state.lastCapturedImage = base64;
       this.updateStatus('ok', 'Image Captured');
-      // Visual feedback: show a preview or just update status
       console.log('[UI] Image buffered for next AI request');
     } else {
       this.updateStatus('error', 'Capture Failed');
@@ -437,8 +439,12 @@ class AppController {
     const code = document.getElementById('hudSolutionContent').textContent || '';
     this.updateStatus('loading', 'Solving...');
     
-    // Pass the buffered image to the AI service
-    this.ai.generateResponse("Please analyze this code/image and suggest a solution.", code, this.state.lastCapturedImage);
+    // Pass the actual prompt and code context correctly
+    const jobDesc = StorageService.get(StorageService.KEYS.JOB_DESCRIPTION, 'General Interview');
+    const resumeText = StorageService.get(StorageService.KEYS.RESUME_TEXT, '');
+    const userPrompt = `Analyze this code and suggest a solution: ${code}`;
+
+    this.ai.generateResponse(jobDesc, resumeText, this.state.lastCapturedImage, userPrompt);
     
     // Clear buffer after sending
     this.state.lastCapturedImage = null;
