@@ -5,7 +5,8 @@
 import { StorageService } from './services/StorageService.js';
 
 export class AIService {
-  constructor(callbacks = {}) {
+  constructor(eventBus, callbacks = {}) {
+    this.eventBus = eventBus;
     this.callbacks = callbacks; // onResponse, onStart, onError
     this.isFreeMode = StorageService.get(StorageService.KEYS.IS_FREE_MODE, true);
     this.conversationHistory = [];
@@ -37,7 +38,9 @@ export class AIService {
     const messages = this.buildPrompt(jobDesc, resumeText, imageData, userPrompt);
     const cacheKey = JSON.stringify(messages);
     if (this.responseCache.has(cacheKey)) {
-      this.callbacks.onResponse?.(this.responseCache.get(cacheKey));
+      const cachedText = this.responseCache.get(cacheKey);
+      this.callbacks.onResponse?.(cachedText);
+      if (this.eventBus) this.eventBus.emit('ai:response', cachedText);
       return;
     }
 
@@ -57,7 +60,11 @@ export class AIService {
       const text = data.choices?.[0]?.message?.content || 'No suggestion available.';
 
       this.responseCache.set(cacheKey, text);
+      
       this.callbacks.onResponse?.(text);
+      if (this.eventBus) {
+        this.eventBus.emit('ai:response', text);
+      }
     } catch (e) {
       console.error('[AI] Suggestion error:', e);
       this.callbacks.onError?.(e);

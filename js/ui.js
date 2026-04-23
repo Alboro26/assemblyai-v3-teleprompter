@@ -53,7 +53,7 @@ class AppController {
     };
 
     // 3. Services
-    this.ai = new AIService();
+    this.ai = new AIService(this.eventBus);
     this.audio = new AudioEngine();
     this.stt = new STTManager(this.eventBus);
     this.camera = new CameraManager(document.getElementById('cameraFeed'));
@@ -346,7 +346,20 @@ class AppController {
     }
   }
 
-  startSession() {
+  async startSession() {
+    this.updateStatus('loading', 'Initializing Audio...');
+    
+    // 1. Initialize the audio pipeline (mic, AudioContext, Worklet)
+    const ok = await this.audio.init();
+    if (!ok) {
+      this.updateStatus('error', 'Microphone access denied');
+      return;
+    }
+
+    // 2. Bridge: hand the initialized engine to STTManager
+    this.stt.setAudioEngine(this.audio);
+
+    // 3. Now start transcription
     this.stt.start();
     this.updateStatus('ok', 'Session Started');
   }
