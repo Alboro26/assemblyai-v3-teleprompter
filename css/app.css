@@ -165,31 +165,30 @@ html, body {
   color: var(--text-main);
   line-height: 1.5;
   text-align: left;
+  font-family: 'Fira Code', 'Courier New', monospace;
 }
 .hud-solution-content::-webkit-scrollbar { width: 3px; }
 .hud-solution-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .hud-solution-content p { margin: 0.4em 0; }
-.hud-solution-content code {
-  background: rgba(0,0,0,0.4);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-family: 'Fira Code', monospace;
-  color: var(--accent);
-}
+
+/* Code Blocks (IDE Style) */
 .hud-solution-content pre {
-  background: rgba(0,0,0,0.6);
+  background: #1a1b26; /* Tokyo Night Dark */
   padding: 1rem;
   border-radius: 8px;
   border: 1px solid var(--border);
   overflow-x: auto;
   margin: 0.75rem 0;
+  tab-size: 4;
 }
-.hud-solution-content pre code {
+.hud-solution-content code {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.82em;
   background: transparent;
   padding: 0;
+}
+.hud-solution-content pre code {
   display: block;
-  color: #fff;
-  font-size: 0.85em;
   line-height: 1.6;
 }
 .hud-solution-content strong { color: var(--accent); }
