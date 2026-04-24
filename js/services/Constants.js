@@ -6,7 +6,8 @@ export const ROLES = {
   CANDIDATE: 'candidate',
   INTERVIEWER: 'interviewer',
   ASSISTANT: 'assistant',
-  USER: 'user' // For internal OpenAI mapping fallback
+  USER: 'user', // For internal OpenAI mapping fallback
+  NEUTRAL: 'neutral' // ✅ Stage UNKNOWN speakers here
 };
 
 export const STORAGE_KEYS = {

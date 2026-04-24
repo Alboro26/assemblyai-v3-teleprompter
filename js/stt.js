@@ -1,4 +1,5 @@
 import { StorageService } from './services/StorageService.js';
+import { EVENTS } from './services/Constants.js';
 
 export class STTManager {
   /**
@@ -186,12 +187,12 @@ export class STTManager {
     if (msgType === 'PartialTranscript') {
       // Show everything stabilized so far + the current moving fragment
       const fullInterim = (this.turnBuffer + " " + transcript).trim();
-      this.eventBus.emit('stt:interim', fullInterim);
+      this.eventBus.emit(EVENTS.STT_INTERIM, fullInterim);
     }
     else if (msgType === 'FinalTranscript') {
       // Accumulate this fragment into the turn buffer
       this.turnBuffer += (this.turnBuffer ? " " : "") + transcript;
-      this.eventBus.emit('stt:interim', this.turnBuffer.trim());
+      this.eventBus.emit(EVENTS.STT_INTERIM, this.turnBuffer.trim());
     }
     else if (msgType === 'Turn') {
       const fullTurnText = (msg.transcript || this.turnBuffer || transcript).trim();
@@ -238,7 +239,7 @@ export class STTManager {
         text: fullTurnText, 
         rawLabel,
         replaceLast,
-        originalTimestamp: replaceLast ? matchedTurn.timestamp : now
+        originalTimestamp: replaceLast ? matchedTurn.startTime : now
       };
 
       // TURN STAGING (Anti-Flicker):
@@ -250,14 +251,19 @@ export class STTManager {
         const sessionMaturity = Math.min(this._turnCount / 6, 1.0); // 0→1 over 6 turns
         const baseWindow = 350; 
         const minWindow = 100;
-        const windowMs = baseWindow - (baseWindow - minWindow) * sessionMaturity;
+        let windowMs = baseWindow - (baseWindow - minWindow) * sessionMaturity;
+
+        // UNKNOWN label -> Increase window to allow diarization to resolve
+        if (rawLabel === 'UNKNOWN' || rawLabel === null) {
+          windowMs = Math.max(windowMs * 1.5, 400);
+        }
 
         // UNKNOWN label or same as dominant -> fast-track
         if (rawLabel === 'UNKNOWN' || rawLabel === null || (this._dominantSpeaker && rawLabel === this._dominantSpeaker)) {
           const fastWindow = Math.max(50, windowMs * 0.3);
           if (this._stagedTurnTimeout) clearTimeout(this._stagedTurnTimeout);
           this._stagedTurnTimeout = setTimeout(() => {
-            this.eventBus.emit('stt:final', finalData);
+            this.eventBus.emit(EVENTS.STT_FINAL, finalData);
             this._stagedTurnTimeout = null;
           }, fastWindow);
         } else {
@@ -265,14 +271,14 @@ export class STTManager {
           this._dominantSpeaker = rawLabel;
           if (this._stagedTurnTimeout) clearTimeout(this._stagedTurnTimeout);
           this._stagedTurnTimeout = setTimeout(() => {
-            this.eventBus.emit('stt:final', finalData);
+            this.eventBus.emit(EVENTS.STT_FINAL, finalData);
             this._stagedTurnTimeout = null;
           }, windowMs);
         }
       } else {
         // Replacement turns are emitted immediately to overwrite
         if (this._stagedTurnTimeout) clearTimeout(this._stagedTurnTimeout);
-        this.eventBus.emit('stt:final', finalData);
+        this.eventBus.emit(EVENTS.STT_FINAL, finalData);
       }
 
       // Update Reconciliation History
@@ -280,7 +286,7 @@ export class STTManager {
         matchedTurn.text = fullTurnText;
         matchedTurn.label = rawLabel;
       } else {
-        this.recentTurns.push({ text: fullTurnText, timestamp: now, label: rawLabel });
+        this.recentTurns.push({ text: fullTurnText, startTime: now, timestamp: now, label: rawLabel });
         if (this.recentTurns.length > 5) this.recentTurns.shift();
       }
 

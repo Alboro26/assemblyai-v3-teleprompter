@@ -6,7 +6,7 @@ import { CameraManager } from './camera.js';
 import { StorageService } from './services/StorageService.js';
 import { EventBus } from './services/EventBus.js';
 import { ModelManager } from './services/ModelManager.js';
-import { ROLES, APP_CONFIG } from './services/Constants.js';
+import { ROLES, APP_CONFIG, EVENTS } from './services/Constants.js';
 
 /**
  * Safely renders Markdown to HTML with XSS protection.
@@ -72,13 +72,13 @@ class AppController {
 
   setupSubscriptions() {
     const unsub = [
-      this.eventBus.on('stt:interim', (text) => this.handleInterim(text)),
-      this.eventBus.on('stt:final', data => this.handleFinalTranscript(data)),
+      this.eventBus.on(EVENTS.STT_INTERIM, (text) => this.handleInterim(text)),
+      this.eventBus.on(EVENTS.STT_FINAL, data => this.handleFinalTranscript(data)),
       this.eventBus.on('calibration:complete', data => this.stopCalibration(null, data.label)),
       this.eventBus.on('calibration:progress', data => this.updateCalibrationProgress(data)),
-      this.eventBus.on('ai:response', text => this.handleAIResponse(text)),
-      this.eventBus.on('ai:context-data', data => this.displayInspector(data)),
-      this.eventBus.on('status:change', (status) => this.updateStatus(status.type, status.text))
+      this.eventBus.on(EVENTS.AI_RESPONSE, text => this.handleAIResponse(text)),
+      this.eventBus.on(EVENTS.AI_CONTEXT_DATA, data => this.displayInspector(data)),
+      this.eventBus.on(EVENTS.STATUS_CHANGE, (status) => this.updateStatus(status.type, status.text))
     ];
     this._unsubscribers.push(...unsub);
   }
@@ -420,8 +420,8 @@ class AppController {
       this.state.conversationHistory = [];
       StorageService.remove(StorageService.KEYS.CONVERSATION_HISTORY);
       this.renderTranscript();
-      this.eventBus.emit('ai:update-history', { history: [] });
-      this.eventBus.emit('ui:show-toast', { message: 'History Cleared' });
+      this.eventBus.emit(EVENTS.AI_UPDATE_HISTORY, { history: [] });
+      this.eventBus.emit(EVENTS.UI_SHOW_TOAST, { message: 'History Cleared' });
     }
   }
 
@@ -560,6 +560,9 @@ class AppController {
       else if (this.state.learnedCandidateLabel === sRaw) {
         role = ROLES.CANDIDATE;
       }
+    } else {
+      // 📌 Stage as NEUTRAL – awaiting speaker confirmation
+      role = ROLES.NEUTRAL;
     }
 
     const aiRole = role; 
@@ -570,9 +573,9 @@ class AppController {
     if (data.replaceLast && this.state.conversationHistory.length > 0) {
       const history = this.state.conversationHistory;
       let found = false;
-      // Search for the specific turn matching the original timestamp
+      // Search for the specific turn matching the immutable startTime
       for (let i = history.length - 1; i >= 0; i--) {
-        if (history[i].timestamp === data.originalTimestamp) {
+        if (history[i].startTime === data.originalTimestamp) {
           const removed = history.splice(i, 1)[0];
           console.log(`[UI] Correcting diarization: Removed targeted turn "${removed.content.substring(0, 20)}..."`);
           found = true;
@@ -603,16 +606,17 @@ class AppController {
       break;
     }
 
-    if (lastHumanEntry && lastHumanEntry.role === aiRole && Math.abs(now - lastHumanEntry.timestamp) < thresholdMs) {
-      console.log(`[UI] Role-Skip Merging: Appending to ${aiRole} entry (${Math.abs(now - lastHumanEntry.timestamp)}ms diff)`);
+    if (lastHumanEntry && lastHumanEntry.role === aiRole && Math.abs(now - lastHumanEntry.lastUpdate) < thresholdMs) {
+      console.log(`[UI] Role-Skip Merging: Appending to ${aiRole} entry (${Math.abs(now - lastHumanEntry.lastUpdate)}ms diff)`);
       lastHumanEntry.content += ' ' + text;
-      lastHumanEntry.timestamp = now;
+      lastHumanEntry.lastUpdate = now;
     } else {
       console.log(`[UI] Finalizing: Creating new entry for ${aiRole}`);
       this.state.conversationHistory.push({
         role: aiRole,
         content: text,
-        timestamp: now,
+        startTime: now,     // Immutable ID
+        lastUpdate: now,    // Mutable window
         rawLabel: rawLabel
       });
     }
@@ -624,19 +628,21 @@ class AppController {
 
     StorageService.set(StorageService.KEYS.CONVERSATION_HISTORY, this.state.conversationHistory);
     this.renderTranscript();
-    this.eventBus.emit('ai:update-history', { history: this.state.conversationHistory });
+    this.eventBus.emit(EVENTS.AI_UPDATE_HISTORY, { history: this.state.conversationHistory });
 
     // Trigger AI if it's the interviewer speaking
     if (aiRole === ROLES.INTERVIEWER) {
       this.requestAISuggestion();
-    } else {
+    } else if (aiRole === ROLES.CANDIDATE) {
       // If it's a candidate turn, cancel any pending suggestions triggered by a previously misidentified interviewer turn
       if (this._aiTriggerTimeout) {
         clearTimeout(this._aiTriggerTimeout);
         this._aiTriggerTimeout = null;
-        this.eventBus.emit('ai:abort');
+        this.eventBus.emit(EVENTS.AI_ABORT);
         console.log('[UI] Cancelled pending AI suggestion (Speaker flipped to Candidate)');
       }
+    } else if (aiRole === ROLES.NEUTRAL) {
+      console.log('[UI] Neutral turn - inhibiting AI suggestion');
     }
 
     // Auto-scroll history
@@ -653,7 +659,7 @@ class AppController {
     this._aiTriggerTimeout = setTimeout(() => {
       const jobDesc = document.getElementById('jobDescription').value;
       const resumeText = document.getElementById('resumeText').value;
-      this.eventBus.emit('ai:request-suggestion', { jobDesc, resumeText });
+      this.eventBus.emit(EVENTS.AI_REQUEST_SUGGESTION, { jobDesc, resumeText });
     }, 1000); // 1000ms settling window for diarization stability
   }
 
@@ -674,7 +680,7 @@ class AppController {
     }
     StorageService.set(StorageService.KEYS.CONVERSATION_HISTORY, this.state.conversationHistory);
     this.renderTranscript();
-    this.eventBus.emit('ai:update-history', { history: this.state.conversationHistory });
+    this.eventBus.emit(EVENTS.AI_UPDATE_HISTORY, { history: this.state.conversationHistory });
   }
 
   renderTranscript() {

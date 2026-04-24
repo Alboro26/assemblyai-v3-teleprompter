@@ -4,7 +4,7 @@
 
 import { StorageService } from './services/StorageService.js';
 import { ModelManager } from './services/ModelManager.js';
-import { ROLES, APP_CONFIG } from './services/Constants.js';
+import { ROLES, APP_CONFIG, EVENTS } from './services/Constants.js';
 
 export class AIService {
   constructor(eventBus, callbacks = {}) {
@@ -21,13 +21,13 @@ export class AIService {
     this._abortController = null;
 
     // Decoupled Control Listeners
-    this.eventBus.on('ai:request-suggestion', data => {
+    this.eventBus.on(EVENTS.AI_REQUEST_SUGGESTION, data => {
       this.generateResponse(data.jobDesc, data.resumeText, data.imageData, data.userPrompt);
     });
     this.eventBus.on('ai:set-mode', data => {
       this.setMode(data.isFree);
     });
-    this.eventBus.on('ai:abort', () => {
+    this.eventBus.on(EVENTS.AI_ABORT, () => {
       if (this._abortController) {
         this._abortController.abort();
         this._abortController = null;
@@ -35,11 +35,11 @@ export class AIService {
         console.log('[AI] Request aborted by signal');
       }
     });
-    this.eventBus.on('ai:get-last-context', (data) => {
+    this.eventBus.on(EVENTS.AI_GET_LAST_CONTEXT, (data) => {
       const liveContext = this.getLiveContext(data?.jobDesc, data?.resumeText);
-      this.eventBus.emit('ai:context-data', liveContext);
+      this.eventBus.emit(EVENTS.AI_CONTEXT_DATA, liveContext);
     });
-    this.eventBus.on('ai:update-history', data => {
+    this.eventBus.on(EVENTS.AI_UPDATE_HISTORY, data => {
       this.updateHistory(data.history);
     });
   }
@@ -84,6 +84,7 @@ export class AIService {
       : StorageService.get(StorageService.KEYS.SELECTED_PAID_MODEL, 'google/gemini-2.0-flash-001');
     
     // Fast path: use cache
+    await this.modelManager.ensureReady();
     if (this.modelManager.hasModel(storedId)) {
       return storedId;
     }
@@ -123,7 +124,7 @@ export class AIService {
       this.lastRequestContext = payload;
 
       this.isRunning = true;
-      if (this.eventBus) this.eventBus.emit('status:change', { text: 'AI Thinking...', type: 'loading' });
+      if (this.eventBus) this.eventBus.emit(EVENTS.STATUS_CHANGE, { text: 'AI Thinking...', type: 'loading' });
 
       // Abort previous if still in flight
       if (this._abortController) this._abortController.abort();
@@ -146,12 +147,12 @@ export class AIService {
       const text = data.choices?.[0]?.message?.content || 'No suggestion available.';
 
       this._deliverResponse(text);
-      if (this.eventBus) this.eventBus.emit('status:change', { text: 'Suggestion ready', type: 'ok' });
+      if (this.eventBus) this.eventBus.emit(EVENTS.STATUS_CHANGE, { text: 'Suggestion ready', type: 'ok' });
 
     } catch (e) {
       console.error('[AI] Suggestion error:', e);
       if (this.eventBus) {
-        this.eventBus.emit('status:change', { 
+        this.eventBus.emit(EVENTS.STATUS_CHANGE, { 
           text: e.message.includes('Credits') ? 'Credits Exhausted' : 'AI Error', 
           type: 'error' 
         });
@@ -165,7 +166,7 @@ export class AIService {
   _deliverResponse(text) {
     this.callbacks.onResponse?.(text);
     if (this.eventBus) {
-      this.eventBus.emit('ai:response', text);
+      this.eventBus.emit(EVENTS.AI_RESPONSE, text);
     }
   }
 

@@ -10,35 +10,51 @@ export class ModelManager {
         this.models = StorageService.get(StorageService.KEYS.CACHED_MODELS, []);
         this.lastFetched = StorageService.get(StorageService.KEYS.MODELS_LAST_FETCHED, 0);
         this.TTL = 24 * 60 * 60 * 1000; // 24 hours
+        this._readyPromise = null;
     }
 
     /**
-     * Fetch models from the proxy or cache.
-     * @param {boolean} force - Force a network fetch.
-     * @returns {Promise<Array>} The list of models.
+     * Ensures models are loaded before proceeding.
      */
-    async fetchModels(force = false) {
+    async ensureReady() {
+        if (!this._readyPromise) {
+            this._readyPromise = this.fetchModels();
+        }
+        return this._readyPromise;
+    }
+
+    /**
+     * Fetch models from the proxy or cache with retry logic.
+     */
+    async fetchModels(force = false, retries = 3) {
         if (!force && Date.now() - this.lastFetched < this.TTL && this.models.length > 0) {
             return this.models;
         }
 
-        try {
-            const res = await fetch('/.netlify/functions/openrouter-proxy', { method: 'GET' });
-            if (!res.ok) throw new Error('Model fetch failed');
-            
-            const data = await res.json();
-            if (data && data.data) {
-                this.models = data.data;
-                this.lastFetched = Date.now();
+        for (let attempt = 0; attempt < retries; attempt++) {
+            try {
+                const res = await fetch('/.netlify/functions/openrouter-proxy', { method: 'GET' });
+                if (!res.ok) throw new Error(`Model fetch failed (${res.status})`);
                 
-                StorageService.set(StorageService.KEYS.CACHED_MODELS, this.models);
-                StorageService.set(StorageService.KEYS.MODELS_LAST_FETCHED, this.lastFetched);
-                
-                return this.models;
+                const data = await res.json();
+                if (data && data.data) {
+                    this.models = data.data;
+                    this.lastFetched = Date.now();
+                    
+                    StorageService.set(StorageService.KEYS.CACHED_MODELS, this.models);
+                    StorageService.set(StorageService.KEYS.MODELS_LAST_FETCHED, this.lastFetched);
+                    
+                    return this.models;
+                }
+            } catch (error) {
+                console.warn(`[ModelManager] Fetch attempt ${attempt + 1} failed:`, error);
+                if (attempt === retries - 1) {
+                    console.error('[ModelManager] All fetch attempts failed. Using cache.');
+                    return this.models;
+                }
+                // Exponential backoff
+                await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
             }
-        } catch (error) {
-            console.warn('[ModelManager] Fetch failed, using cache:', error);
-            return this.models;
         }
         return this.models;
     }
