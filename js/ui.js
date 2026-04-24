@@ -53,7 +53,9 @@ class AppController {
       mergeThreshold: StorageService.get(StorageService.KEYS.MERGE_THRESHOLD, 2.0),
       lastStatusType: 'ok',
       currentMode: 'voice', // Default mode
-      lastCapturedImage: null // Buffer for multimodal AI
+      lastCapturedImage: null, // Buffer for multimodal AI
+      isCandidateSpeaking: false,
+      pendingSuggestion: null
     };
 
     // 3. Services
@@ -698,6 +700,33 @@ class AppController {
       console.log('[UI] Standalone neutral turn - inhibiting AI suggestion');
     }
 
+    // 5. SPEAKER TRACKING: Handle DOM Persistence and Credit Protection
+    if (finalEntry.role === ROLES.CANDIDATE) {
+      this.state.isCandidateSpeaking = true;
+      
+      // Start credit-protection timer: Abort if candidate talks for a very long time
+      if (!this._candidateSpeechAbortTimer) {
+        this._candidateSpeechAbortTimer = setTimeout(() => {
+          this.eventBus.emit(EVENTS.AI_ABORT);
+          console.log('[UI] Aborted AI suggestion due to long candidate speech (Credit protection)');
+          this._candidateSpeechAbortTimer = null;
+        }, APP_CONFIG.ABORT_AFTER_CANDIDATE_SPEECH_MS || 15000);
+      }
+    } else {
+      this.state.isCandidateSpeaking = false;
+      if (this._candidateSpeechAbortTimer) {
+        clearTimeout(this._candidateSpeechAbortTimer);
+        this._candidateSpeechAbortTimer = null;
+      }
+      
+      // Apply pending suggestion if one arrived while candidate was speaking
+      if (this.state.pendingSuggestion) {
+        console.log('[UI] Applying pending suggestion (Candidate finished speaking)');
+        this.applyAIResponse(this.state.pendingSuggestion);
+        this.state.pendingSuggestion = null;
+      }
+    }
+
     // Auto-scroll history
     const container = document.getElementById('transcriptHistory');
     if (container) {
@@ -717,6 +746,25 @@ class AppController {
   }
 
   handleAIResponse(text) {
+    // Phase 1: Update State & History (Always)
+    this.state.conversationHistory.push({ role: ROLES.ASSISTANT, content: text });
+    if (this.state.conversationHistory.length > APP_CONFIG.HISTORY_LIMIT) {
+      this.state.conversationHistory = this.state.conversationHistory.slice(-APP_CONFIG.HISTORY_LIMIT);
+    }
+    StorageService.set(StorageService.KEYS.CONVERSATION_HISTORY, this.state.conversationHistory);
+    this.renderTranscript();
+    this.eventBus.emit(EVENTS.AI_UPDATE_HISTORY, { history: this.state.conversationHistory });
+
+    // Phase 2: Update Teleprompter (Deferred if candidate is speaking)
+    if (this.state.isCandidateSpeaking) {
+      console.log('[UI] Candidate is speaking. Queuing suggestion for later display.');
+      this.state.pendingSuggestion = text;
+    } else {
+      this.applyAIResponse(text);
+    }
+  }
+
+  applyAIResponse(text) {
     const el = document.getElementById('teleprompterContent');
     if (el) {
       // Transition effect
@@ -726,14 +774,6 @@ class AppController {
         el.classList.remove('updating');
       }, 400);
     }
-
-    this.state.conversationHistory.push({ role: ROLES.ASSISTANT, content: text });
-    if (this.state.conversationHistory.length > APP_CONFIG.HISTORY_LIMIT) {
-      this.state.conversationHistory = this.state.conversationHistory.slice(-APP_CONFIG.HISTORY_LIMIT);
-    }
-    StorageService.set(StorageService.KEYS.CONVERSATION_HISTORY, this.state.conversationHistory);
-    this.renderTranscript();
-    this.eventBus.emit(EVENTS.AI_UPDATE_HISTORY, { history: this.state.conversationHistory });
   }
 
   renderTranscript() {

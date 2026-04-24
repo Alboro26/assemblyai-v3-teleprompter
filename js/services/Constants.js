@@ -35,5 +35,6 @@ export const APP_CONFIG = {
   HISTORY_LIMIT: 50,
   MERGE_THRESHOLD_MS: 1500, // Deterministic gap for smart wrapping
   MERGE_NEUTRAL_THRESHOLD: 500, // ms
+  ABORT_AFTER_CANDIDATE_SPEECH_MS: 15000, // ms
   INTERLEAVING_POLICY: 'break' // 'break' or 'allow' merging around AI turns
 };
