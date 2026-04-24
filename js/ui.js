@@ -232,7 +232,8 @@ class AppController {
       document.getElementById('aiDelay').value = this.state.aiTriggerDelay || 2.0;
       document.getElementById('voiceThreshold').value = this.state.voiceThreshold;
       document.getElementById('noiseFloor').value = this.state.noiseFloorThreshold;
-      document.getElementById('mergeThreshold').value = this.state.mergeThreshold;
+      const mergeEl = document.getElementById('mergeThreshold');
+      if (mergeEl) mergeEl.value = this.state.mergeThreshold || 1.5;
 
       this.updateFontSize(0);
       this.updateCalibrationUI();
@@ -594,29 +595,68 @@ class AppController {
       }
     }
 
-    // SMART MERGE LOGIC (Role-Skip Merging)
+    // SMART MERGE LOGIC (Deterministic Gap Merging)
     const history = this.state.conversationHistory;
-    const thresholdMs = this.state.mergeThreshold * 1000;
+    const mergeThreshold = APP_CONFIG.MERGE_THRESHOLD_MS;
     let lastHumanEntry = null;
+    let lastHumanIndex = -1;
 
-    // Walk backwards, skipping assistant entries to find the last human speaker
+    // 1. Find the last human entry
     for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].role === ROLES.ASSISTANT) continue;
-      lastHumanEntry = history[i];
-      break;
+      if (history[i].role !== ROLES.ASSISTANT) {
+        lastHumanEntry = history[i];
+        lastHumanIndex = i;
+        break;
+      }
     }
 
-    if (lastHumanEntry && lastHumanEntry.role === aiRole && Math.abs(now - lastHumanEntry.lastUpdate) < thresholdMs) {
-      console.log(`[UI] Role-Skip Merging: Appending to ${aiRole} entry (${Math.abs(now - lastHumanEntry.lastUpdate)}ms diff)`);
+    // 2. Check for Interleaving Policy ('break')
+    let aiInterleaved = false;
+    if (lastHumanIndex !== -1 && APP_CONFIG.INTERLEAVING_POLICY === 'break') {
+      for (let i = lastHumanIndex + 1; i < history.length; i++) {
+        if (history[i].role === ROLES.ASSISTANT) {
+          aiInterleaved = true;
+          break;
+        }
+      }
+    }
+
+    // 3. Deterministic Merge Decision
+    // Allow merging if roles match EXACTLY or if one of them is NEUTRAL (speaker unknown)
+    const rolesMatch = lastHumanEntry && (
+      lastHumanEntry.role === aiRole ||
+      lastHumanEntry.role === ROLES.NEUTRAL ||
+      aiRole === ROLES.NEUTRAL
+    );
+
+    let shouldMerge = false;
+    if (lastHumanEntry && rolesMatch && !aiInterleaved) {
+      const gap = data.audioStart - lastHumanEntry.audioEnd;
+      if (gap <= mergeThreshold) {
+        shouldMerge = true;
+      }
+    }
+
+    if (shouldMerge) {
+      console.log(`[UI] Deterministic Merge: Gap=${data.audioStart - lastHumanEntry.audioEnd}ms | Role Upgrade: ${lastHumanEntry.role}->${aiRole}`);
       lastHumanEntry.content += ' ' + text;
+      lastHumanEntry.audioEnd = data.audioEnd;
       lastHumanEntry.lastUpdate = now;
+
+      // "Claim" the neutral turn: If we merged an identified role into a neutral turn, 
+      // or vice-versa, upgrade the entry to the identified role.
+      if (lastHumanEntry.role === ROLES.NEUTRAL && aiRole !== ROLES.NEUTRAL) {
+        lastHumanEntry.role = aiRole;
+      }
     } else {
       console.log(`[UI] Finalizing: Creating new entry for ${aiRole}`);
       this.state.conversationHistory.push({
         role: aiRole,
         content: text,
-        startTime: now,     // Immutable ID
-        lastUpdate: now,    // Mutable window
+        startTime: now,     // Immutable identity (system time for ID)
+        audioStart: data.audioStart, // Deterministic identity (audio time)
+        audioEnd: data.audioEnd,
+        lastUpdate: now,    // Mutable merge window
         rawLabel: rawLabel
       });
     }

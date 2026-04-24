@@ -197,6 +197,10 @@ export class STTManager {
     else if (msgType === 'Turn') {
       const fullTurnText = (msg.transcript || this.turnBuffer || transcript).trim();
       const now = Date.now();
+      
+      // Extract Audio Timestamps (v3) - Convert seconds to ms
+      const audioStart = Math.round((msg.audio_start || 0) * 1000);
+      const audioEnd = Math.round((msg.audio_end || 0) * 1000);
 
       // ADVANCED TURN RECONCILIATION (v2):
       // Check if this turn is a correction/extension of any recent turn.
@@ -239,7 +243,9 @@ export class STTManager {
         text: fullTurnText, 
         rawLabel,
         replaceLast,
-        originalTimestamp: replaceLast ? matchedTurn.startTime : now
+        originalTimestamp: replaceLast ? matchedTurn.startTime : now,
+        audioStart,
+        audioEnd
       };
 
       // TURN STAGING (Anti-Flicker):
@@ -283,10 +289,18 @@ export class STTManager {
 
       // Update Reconciliation History
       if (replaceLast && matchedTurn) {
-        matchedTurn.text = fullTurnText;
         matchedTurn.label = rawLabel;
+        matchedTurn.audioStart = audioStart;
+        matchedTurn.audioEnd = audioEnd;
       } else {
-        this.recentTurns.push({ text: fullTurnText, startTime: now, timestamp: now, label: rawLabel });
+        this.recentTurns.push({ 
+          text: fullTurnText, 
+          startTime: now, 
+          timestamp: now, 
+          label: rawLabel,
+          audioStart,
+          audioEnd 
+        });
         if (this.recentTurns.length > 5) this.recentTurns.shift();
       }
 

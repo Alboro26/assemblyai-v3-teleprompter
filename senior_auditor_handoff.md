@@ -34,21 +34,31 @@ The application is transitioning to the **AssemblyAI v3 (`u3-rt-pro`)** protocol
 - **Repository**: `https://github.com/Alboro26/assemblyai-v3-teleprompter.git`
 - **Active Branch**: `dev-merged`
 
+## 4. The Jitter-Proof Merge (Audio-Offset Logic)
+- **Problem**: Relying on the *arrival time* of transcript fragments in the UI led to incorrect wrapping if network jitter caused fragments to arrive out of order or with varying delays.
+- **Impact**: Breaking human turns into multiple bubbles unnecessarily.
+- **Current Fix**: Migrated to **Deterministic Gap Merging**.
+  - We now use `audioStart` and `audioEnd` timestamps from the AssemblyAI payload.
+  - Merge Condition: `incoming.audioStart - lastHuman.audioEnd < MERGE_THRESHOLD_MS`.
+  - This is mathematically stable and immune to arrival jitter.
+- **Interleaving Policy**: Added an explicit guard. If an AI `ASSISTANT` turn is present in the history after the last human turn, the merge chain is terminated to ensure conversational clarity.
+
+## 5. The "Frozen Scroll" Regression
+- **Problem**: The transcript panel appeared "stuck" at the top of the conversation.
+- **Root Cause**: `renderTranscript()` was targeting `#transcriptMessages` (the inner list) for its `scrollTop` assignment, but the actual scrollable container was `#transcriptHistory`.
+- **Current Fix**: Surgical correction in `ui.js` to target the outer container and ensuring `handleAIResponse` triggers a scroll-to-bottom upon receiving suggestions.
+
 ## Relevant Files & Line Numbers
 
 ### 1. [js/stt.js](file:///c:/Users/alber/Desktop/copilot/interview-teleprompter/js/stt.js)
-- **Turn Staging (Anti-Flicker)**: Lines `241-255`
-- **Reconciliation Heuristics (v3)**: Lines `212-231`
+- **Audio Metadata Extraction**: Lines `196-200`, `280-294`
 - **Normalization (v3 compatibility)**: Lines `163-172`
 
 ### 2. [js/ui.js](file:///c:/Users/alber/Desktop/copilot/interview-teleprompter/js/ui.js)
-- **Targeted Retraction (Timestamp Matching)**: Lines `567-591`
-- **Smart Merge Logic**: Lines `593-611`
-- **AI Suggestion Orchestration**: Lines `613-628`
+- **Deterministic Merge (Audio Gap)**: Lines `594-617`
+- **Surgical Scroll Fix**: Lines `724-734`
+- **AI Response Handling**: Lines `693-710`
 
-### 3. [js/ai.js](file:///c:/Users/alber/Desktop/copilot/interview-teleprompter/js/ai.js)
-- **Role Mapping (Candidate Support)**: Lines `161-169`
-- **Context Preview Logic**: Lines `26-40`
-
-### 4. [js/services/Constants.js](file:///c:/Users/alber/Desktop/copilot/interview-teleprompter/js/services/Constants.js)
-- **Core Role Definitions**: Lines `1-10`
+### 3. [js/services/Constants.js](file:///c:/Users/alber/Desktop/copilot/interview-teleprompter/js/services/Constants.js)
+- **Merge Threshold (1500ms)**: Line `32`
+- **Interleaving Policy ('break')**: Line `33`
