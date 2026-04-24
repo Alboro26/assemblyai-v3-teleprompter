@@ -23,6 +23,8 @@ export class STTManager {
     this.turnBuffer = '';
     this.recentTurns = []; // History for reconciliation (v3)
     this._stagedTurnTimeout = null;
+    this._turnCount = 0;
+    this._dominantSpeaker = null;
 
     // Decoupled Control Listeners
     this.eventBus.on('stt:start-calibration', () => this.startCalibration());
@@ -112,6 +114,7 @@ export class STTManager {
         speech_model: 'u3-rt-pro',
         sample_rate: '16000',
         speaker_labels: 'true',
+        max_speakers: '2',
         language_code: 'en',
         punctuate: 'true',
         format_text: 'true',
@@ -241,14 +244,33 @@ export class STTManager {
       // TURN STAGING (Anti-Flicker):
       // If this is a brand new turn, wait 200ms to see if a correction/replacement arrives.
       // This prevents the "Yellow then Purple" flicker common in v3.
+      // TURN STAGING (Adaptive window based on session maturity)
       if (!replaceLast) {
-        if (this._stagedTurnTimeout) clearTimeout(this._stagedTurnTimeout);
-        this._stagedTurnTimeout = setTimeout(() => {
-          this.eventBus.emit('stt:final', finalData);
-          this._stagedTurnTimeout = null;
-        }, 250);
+        this._turnCount++;
+        const sessionMaturity = Math.min(this._turnCount / 6, 1.0); // 0→1 over 6 turns
+        const baseWindow = 350; 
+        const minWindow = 100;
+        const windowMs = baseWindow - (baseWindow - minWindow) * sessionMaturity;
+
+        // UNKNOWN label or same as dominant -> fast-track
+        if (rawLabel === 'UNKNOWN' || rawLabel === null || (this._dominantSpeaker && rawLabel === this._dominantSpeaker)) {
+          const fastWindow = Math.max(50, windowMs * 0.3);
+          if (this._stagedTurnTimeout) clearTimeout(this._stagedTurnTimeout);
+          this._stagedTurnTimeout = setTimeout(() => {
+            this.eventBus.emit('stt:final', finalData);
+            this._stagedTurnTimeout = null;
+          }, fastWindow);
+        } else {
+          // New speaker or unstable session -> full window
+          this._dominantSpeaker = rawLabel;
+          if (this._stagedTurnTimeout) clearTimeout(this._stagedTurnTimeout);
+          this._stagedTurnTimeout = setTimeout(() => {
+            this.eventBus.emit('stt:final', finalData);
+            this._stagedTurnTimeout = null;
+          }, windowMs);
+        }
       } else {
-        // Replacement turns are emitted immediately to overwrite the staged or previous turn
+        // Replacement turns are emitted immediately to overwrite
         if (this._stagedTurnTimeout) clearTimeout(this._stagedTurnTimeout);
         this.eventBus.emit('stt:final', finalData);
       }

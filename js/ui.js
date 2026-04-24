@@ -6,7 +6,7 @@ import { CameraManager } from './camera.js';
 import { StorageService } from './services/StorageService.js';
 import { EventBus } from './services/EventBus.js';
 import { ModelManager } from './services/ModelManager.js';
-import { ROLES } from './services/Constants.js';
+import { ROLES, APP_CONFIG } from './services/Constants.js';
 
 /**
  * Safely renders Markdown to HTML with XSS protection.
@@ -420,6 +420,7 @@ class AppController {
       this.state.conversationHistory = [];
       StorageService.remove(StorageService.KEYS.CONVERSATION_HISTORY);
       this.renderTranscript();
+      this.eventBus.emit('ai:update-history', { history: [] });
       this.eventBus.emit('ui:show-toast', { message: 'History Cleared' });
     }
   }
@@ -581,7 +582,7 @@ class AppController {
       // Fallback: If no exact timestamp match, remove the last speaker turn
       if (!found) {
         for (let i = history.length - 1; i >= 0; i--) {
-          if (history[i].role !== 'assistant') {
+          if (history[i].role !== ROLES.ASSISTANT) {
             const removed = history.splice(i, 1)[0];
             console.log(`[UI] Correcting diarization: Removed last speaker turn (fallback) "${removed.content.substring(0, 20)}..."`);
             break;
@@ -590,16 +591,24 @@ class AppController {
       }
     }
 
-    // SMART MERGE LOGIC (Finalization)
-    const lastEntry = this.state.conversationHistory[this.state.conversationHistory.length - 1];
+    // SMART MERGE LOGIC (Role-Skip Merging)
+    const history = this.state.conversationHistory;
     const thresholdMs = this.state.mergeThreshold * 1000;
+    let lastHumanEntry = null;
 
-    if (lastEntry && lastEntry.role === aiRole && Math.abs(now - lastEntry.timestamp) < thresholdMs) {
-      console.log(`[UI] Finalizing: Merging into previous ${aiRole} entry (${Math.abs(now - lastEntry.timestamp)}ms diff)`);
-      lastEntry.content += ' ' + text;
-      lastEntry.timestamp = now;
+    // Walk backwards, skipping assistant entries to find the last human speaker
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].role === ROLES.ASSISTANT) continue;
+      lastHumanEntry = history[i];
+      break;
+    }
+
+    if (lastHumanEntry && lastHumanEntry.role === aiRole && Math.abs(now - lastHumanEntry.timestamp) < thresholdMs) {
+      console.log(`[UI] Role-Skip Merging: Appending to ${aiRole} entry (${Math.abs(now - lastHumanEntry.timestamp)}ms diff)`);
+      lastHumanEntry.content += ' ' + text;
+      lastHumanEntry.timestamp = now;
     } else {
-      console.log(`[UI] Finalizing: Creating new entry for ${aiRole} (Diff: ${lastEntry ? now - lastEntry.timestamp : 'N/A'}ms)`);
+      console.log(`[UI] Finalizing: Creating new entry for ${aiRole}`);
       this.state.conversationHistory.push({
         role: aiRole,
         content: text,
@@ -609,8 +618,8 @@ class AppController {
     }
 
     // PRUNING: Keep history manageable (limit 50)
-    if (this.state.conversationHistory.length > 50) {
-      this.state.conversationHistory = this.state.conversationHistory.slice(-50);
+    if (this.state.conversationHistory.length > APP_CONFIG.HISTORY_LIMIT) {
+      this.state.conversationHistory = this.state.conversationHistory.slice(-APP_CONFIG.HISTORY_LIMIT);
     }
 
     StorageService.set(StorageService.KEYS.CONVERSATION_HISTORY, this.state.conversationHistory);
@@ -625,6 +634,7 @@ class AppController {
       if (this._aiTriggerTimeout) {
         clearTimeout(this._aiTriggerTimeout);
         this._aiTriggerTimeout = null;
+        this.eventBus.emit('ai:abort');
         console.log('[UI] Cancelled pending AI suggestion (Speaker flipped to Candidate)');
       }
     }
@@ -659,8 +669,8 @@ class AppController {
     }
 
     this.state.conversationHistory.push({ role: ROLES.ASSISTANT, content: text });
-    if (this.state.conversationHistory.length > 50) {
-      this.state.conversationHistory = this.state.conversationHistory.slice(-50);
+    if (this.state.conversationHistory.length > APP_CONFIG.HISTORY_LIMIT) {
+      this.state.conversationHistory = this.state.conversationHistory.slice(-APP_CONFIG.HISTORY_LIMIT);
     }
     StorageService.set(StorageService.KEYS.CONVERSATION_HISTORY, this.state.conversationHistory);
     this.renderTranscript();
@@ -705,7 +715,7 @@ class AppController {
     this.eventBus.emit('ai:update-history', { history: this.state.conversationHistory });
 
     // If it was changed TO interviewer, trigger a new AI response
-    if (entry.role === 'interviewer') {
+    if (entry.role === ROLES.INTERVIEWER) {
       this.requestAISuggestion();
     }
   }

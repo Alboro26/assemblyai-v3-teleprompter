@@ -4,7 +4,7 @@
 
 import { StorageService } from './services/StorageService.js';
 import { ModelManager } from './services/ModelManager.js';
-import { ROLES } from './services/Constants.js';
+import { ROLES, APP_CONFIG } from './services/Constants.js';
 
 export class AIService {
   constructor(eventBus, callbacks = {}) {
@@ -16,6 +16,9 @@ export class AIService {
     this.responseCache = new Map();
     this.modelManager = new ModelManager();
     this.lastRequestContext = null;
+    this._contextDirty = true;
+    this._liveContextPreview = null;
+    this._abortController = null;
 
     // Decoupled Control Listeners
     this.eventBus.on('ai:request-suggestion', data => {
@@ -24,20 +27,17 @@ export class AIService {
     this.eventBus.on('ai:set-mode', data => {
       this.setMode(data.isFree);
     });
-    this.eventBus.on('ai:get-last-context', (data) => {
-      if (this.lastRequestContext) {
-        this.eventBus.emit('ai:context-data', this.lastRequestContext);
-      } else {
-        // Build a preview context from current history/config
-        const jobDesc = data?.jobDesc || StorageService.get(StorageService.KEYS.JOB_DESCRIPTION, '');
-        const resumeText = data?.resumeText || StorageService.get(StorageService.KEYS.RESUME_TEXT, '');
-        const previewMessages = this.buildPrompt(jobDesc, resumeText);
-        this.eventBus.emit('ai:context-data', { 
-          model: this.getSelectedModel(), 
-          messages: previewMessages,
-          _is_preview: true 
-        });
+    this.eventBus.on('ai:abort', () => {
+      if (this._abortController) {
+        this._abortController.abort();
+        this._abortController = null;
+        this.isRunning = false;
+        console.log('[AI] Request aborted by signal');
       }
+    });
+    this.eventBus.on('ai:get-last-context', (data) => {
+      const liveContext = this.getLiveContext(data?.jobDesc, data?.resumeText);
+      this.eventBus.emit('ai:context-data', liveContext);
     });
     this.eventBus.on('ai:update-history', data => {
       this.updateHistory(data.history);
@@ -50,6 +50,29 @@ export class AIService {
 
   updateHistory(history) {
     this.conversationHistory = history;
+    this._contextDirty = true;
+    this.lastRequestContext = null; // Invalidate stale snapshot
+  }
+
+  /**
+   * Builds or returns a cached live preview of the current AI context.
+   */
+  getLiveContext(jobDesc, resumeText) {
+    if (!this._contextDirty && this._liveContextPreview) {
+      return this._liveContextPreview;
+    }
+    const messages = this.buildPrompt(
+      jobDesc || StorageService.get(StorageService.KEYS.JOB_DESCRIPTION, ''),
+      resumeText || StorageService.get(StorageService.KEYS.RESUME_TEXT, '')
+    );
+    this._liveContextPreview = {
+      model: this.getSelectedModel(),
+      messages: messages,
+      _is_live_preview: true,
+      _generated_at: Date.now()
+    };
+    this._contextDirty = false;
+    return this._liveContextPreview;
   }
 
   /**
@@ -89,9 +112,9 @@ export class AIService {
 
       const messages = this.buildPrompt(jobDesc, resumeText, imageData, userPrompt);
       
-      if (!imageData && messages[messages.length - 1]?.role !== 'user') {
+      if (!imageData && messages[messages.length - 1]?.role !== ROLES.USER) {
         messages.push({ 
-          role: 'user', 
+          role: ROLES.USER, 
           content: 'What should the candidate say next? Give me a concise, natural response for the candidate to read aloud.' 
         });
       }
@@ -102,10 +125,15 @@ export class AIService {
       this.isRunning = true;
       if (this.eventBus) this.eventBus.emit('status:change', { text: 'AI Thinking...', type: 'loading' });
 
+      // Abort previous if still in flight
+      if (this._abortController) this._abortController.abort();
+      this._abortController = new AbortController();
+
       const res = await fetch('/.netlify/functions/openrouter-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: this._abortController.signal
       });
 
       // Handle credit exhaustion
@@ -159,7 +187,7 @@ export class AIService {
       Job: ${jobDesc}
       Candidate Resume: ${resumeText}`;
 
-    const mappedHistory = this.conversationHistory.slice(-20).map(entry => {
+    const mappedHistory = this.conversationHistory.slice(-APP_CONFIG.AI_CONTEXT_LIMIT).map(entry => {
       // Map interviewer/candidate to OpenAI 'user' role, assistant stays assistant
       const role = (entry.role === ROLES.INTERVIEWER || entry.role === ROLES.CANDIDATE || entry.role === ROLES.USER) ? ROLES.USER : entry.role;
       const prefix = entry.role === ROLES.INTERVIEWER ? '[Interviewer]: ' : (entry.role === ROLES.CANDIDATE || entry.role === ROLES.USER ? '[Candidate]: ' : '');
@@ -178,7 +206,7 @@ export class AIService {
     if (imageData) {
       const prompt = userPrompt || 'Analyze this image context for my interview response:';
       messages.push({
-        role: 'user',
+        role: ROLES.USER,
         content: [
           { type: 'text', text: prompt },
           { type: 'image_url', image_url: { url: imageData } }
