@@ -4,28 +4,23 @@
 **Current Status**: Stable / Modernized (Logic & Connectivity)
 
 ## ✅ Recently Completed
-- **STT Protocol Upgrade**: Fully migrated to AssemblyAI v3 / Universal-3 Pro (`u3-rt-pro` model). Fixed the `Turn` event message handling and `end_of_turn` detection.
-- **Ghostwriter Protocol**: Refined the AI system prompt to enforce concise, ready-to-read-aloud responses. Removed meta-analysis and conversational "thoughts" from the AI coach.
-- **AI 400 Error Resolution**: Implemented role mapping (`interviewer` -> `user`) for OpenRouter compatibility while preserving speaker context via content prefixing (`[Interviewer]:`).
-- **Smart Speaker ID**: Implemented a "Session Learning" heuristic. The app now learns speaker roles from manual user corrections in the transcript.
-- **UI & Navigation**: 
-    - Fixed the sidebar toggle logic and added smooth CSS transitions.
-    - Corrected the teleprompter DOM ID mismatch to restore visibility of AI suggestions.
-    - [x] **Smart Merging**: Temporal clustering (2s threshold) to reduce transcript noise.
-- [x] **Live Streaming**: "Ghost Bubbles" with word-by-word interim population.
-- [x] **Diarization Stability**: Implemented Advanced Turn Reconciliation using Jaccard Similarity and temporal history to resolve late speaker-id flips in AssemblyAI v3.
-- [x] **Event-Driven Architecture**: Fully decoupled services via `EventBus`.
+- **Architectural Cleanup**: Eliminated magic strings by standardizing on `js/services/Constants.js`. All roles (`candidate`, `interviewer`, `assistant`) are now synchronized across STT, UI, and AI layers.
+- **Diarization Echo Resolution**: Implemented **Turn Staging** (250ms window) in `stt.js` to suppress the "Orange-to-Purple" flicker common in AssemblyAI v3 corrections.
+- **Targeted Retraction**: Refactored the UI history update logic to use **Timestamp Matching**. The system now surgically removes specific turns being corrected rather than relying on `pop()`, preventing orphaned duplicates.
+- **AI Context Alignment**: Synchronized `ai.js` to recognize the `candidate` role, ensuring the inspection JSON and prompt history are consistent with the live UI.
+- **Git Maintenance**: Cleaned up obsolete branches; current state finalized on `dev-merged`.
 
 ## Known Issues & Technical Debt
-- **Interim Jitter**: The "Neutral Bubble" can be prematurely cleared or skipped if the STT sends a `Turn` message too early in the speech cycle. (Mitigated by settling window).
-- **Merge Race Condition**: Corrections arriving with slightly different timestamps are now stabilized via `originalTimestamp` inheritance in the reconciler.
+- **Inspection Lag**: The "Raw AI Context" viewer displays a snapshot of the last *triggered* request. If an AI request is cancelled (e.g., due to a speaker flip to candidate), the viewer displays stale data from the cancelled turn.
+- **Merge Interruption**: Consecutive turns from the same speaker do not merge if an AI "Assistant" response is injected between them.
 
 ## 🛠️ Key Architectural Decisions
-- **Event-Driven UI**: All service-to-UI communication must go through the `EventBus`.
-- **Role Mapping**: The `AIService` maps all incoming speech to the `user` role for API compliance but uses internal metadata for UI coloring.
-- **Diarization**: `CANDIDATE_LABEL_OVERRIDE` in storage is the primary source, followed by `learnedCandidateLabel` in the session state.
+- **Targeted Correction**: Every `stt:final` event carries an `originalTimestamp` to ensure the UI can locate and replace the correct history entry regardless of order.
+- **Turn Staging**: Sacrificing 250ms of latency for brand new turns to guarantee diarization accuracy and prevent UI "jitter".
+- **Role Standardization**: All internal logic uses `ROLES.CANDIDATE` and `ROLES.INTERVIEWER`, mapped to `user` only at the API egress point in `ai.js`.
 
 ## 🚀 Next Steps / Pending
-- **UI Polish**: Further aesthetic refinements to the HUD and teleprompter transitions.
-- **Diarization UI**: Add a clear indicator in the settings of which label is currently "learned."
-- **Model Tuning**: Monitor response quality with different OpenRouter models.
+- **DeepSeek Stability Audit**: Review the state transition logic in `handleFinalTranscript` for atomicity and potential race conditions.
+- **Inspector Refactor**: Move the AI Context modal to a "Live Preview" pattern that polls the current history rather than a static snapshot.
+- **Smart Merge Enhancement**: Implement "Assistant-Aware Merging" to allow speaker bubbles to merge even if an AI suggestion was generated between them.
+- **Context Sync Audit**: Verify full session state synchronization between the event-bus and AI-prompt buffer under high-load speaker-switching scenarios.
