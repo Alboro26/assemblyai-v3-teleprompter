@@ -29,7 +29,8 @@ export class StorageService {
         AI_TRIGGER_DELAY: 'aiTriggerDelay',
         JOB_DESCRIPTION: 'jobDescription',
         RESUME_TEXT: 'resumeText',
-        CANDIDATE_LABEL_OVERRIDE: 'candidateLabelOverride'
+        CANDIDATE_LABEL_OVERRIDE: 'candidateLabelOverride',
+        MERGE_THRESHOLD: 'mergeThreshold'
     };
 
     /**
@@ -124,7 +125,8 @@ export class StorageService {
             this.KEYS.FONT_SIZE,
             this.KEYS.VOICE_THRESHOLD,
             this.KEYS.NOISE_FLOOR_THRESHOLD,
-            this.KEYS.AI_TRIGGER_DELAY
+            this.KEYS.AI_TRIGGER_DELAY,
+            this.KEYS.MERGE_THRESHOLD
         ];
 
         numericKeys.forEach(key => {

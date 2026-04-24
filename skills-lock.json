@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "auto-skill-generator": {
+      "source": "benchflow-ai/skillsbench",
+      "sourceType": "github",
+      "computedHash": "20e386dd9ca80b58a495216ed850ea09f127fb355b341f343d4b7092432f5904"
+    },
+    "skill-creator": {
+      "source": "benchflow-ai/skillsbench",
+      "sourceType": "github",
+      "computedHash": "a8f0dddf0a659bc1a8fadba59dabad3df390386ad9fd82a3cda3ee833aa1abc1"
+    },
+    "skillsbench": {
+      "source": "benchflow-ai/skillsbench",
+      "sourceType": "github",
+      "computedHash": "20bd566342f10a6e473d359f821a203beb9b50d423a57d85b768ab790c287a0f"
+    }
+  }
+}

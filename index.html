@@ -3,11 +3,11 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0a0a0f">
   <meta name="mobile-web-app-capable" content="yes">
   <title>Interview Teleprompter</title>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://api.openrouter.ai https://api.assemblyai.com wss://streaming.assemblyai.com https://cdnjs.cloudflare.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://api.openrouter.ai https://openrouter.ai https://api.assemblyai.com wss://streaming.assemblyai.com https://cdnjs.cloudflare.com;">
   <link rel="manifest" href="manifest.json">
   <link
     href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;600;800&display=swap"
@@ -25,8 +25,10 @@
           <span class="panel-title">TRANSCRIPT</span>
         </div>
         <div class="transcript-panel" id="transcriptContainer">
-          <div class="transcript-history teleprompter-scroll" id="transcriptHistory"></div>
-          <div class="interim-text" id="interimText"></div>
+          <div class="transcript-history teleprompter-scroll" id="transcriptHistory">
+            <div id="transcriptMessages" class="transcript-messages"></div>
+            <div class="interim-text" id="interimText"></div>
+          </div>
         </div>
       </aside>
       <!-- Coding HUD Sidebar: direct grid child so it occupies column 1 -->
@@ -51,7 +53,7 @@
       </div>
 
       <section class="main-content-panel">
-        <button class="btn-sidebar-toggle" id="btnHideSidebar" title="Toggle Sidebar">
+        <button class="btn-sidebar-toggle" id="btnHideSidebar" title="Toggle Sidebar" aria-label="Toggle Sidebar">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <line x1="9" y1="3" x2="9" y2="21" />
@@ -73,10 +75,14 @@
           <div class="camera-float-controls">
             <div class="camera-thumbnail-strip" id="cameraThumbnailStrip"></div>
             <div class="camera-float-buttons">
-              <button class="btn-float-cycle" id="btnHudToggle" title="Cycle layout">⇔</button>
-              <button class="btn-float-capture" id="btnHudCapture">📸 Capture (<span
+              <button class="btn-float-cycle" id="btnHudToggle" title="Cycle layout" aria-label="Cycle layout">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 2h10l3 3v14l-3 3H7l-3-3V5l3-3zM7 12h10" />
+                </svg>
+              </button>
+              <button class="btn-float-capture" id="btnHudCapture" aria-label="Capture image">📸 Capture (<span
                   id="hudPhotoCount">0</span>)</button>
-              <button class="btn-float-solve" id="btnHudSolve" style="display:none;">🚀 Solve</button>
+              <button class="btn-float-solve" id="btnHudSolve" style="display:none;" aria-label="Solve with AI">🚀 Solve</button>
             </div>
           </div>
         </div>
@@ -111,7 +117,7 @@
             Camera
           </button>
         </div>
-        <button class="footer-btn action-btn" id="pauseBtn" title="Pause/Resume">
+        <button class="footer-btn action-btn" id="pauseBtn" title="Pause/Resume" aria-label="Pause or Resume transcript">
           <svg id="svgPause" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <rect x="6" y="4" width="4" height="16" />
@@ -126,13 +132,13 @@
 
       <div class="bar-right">
         <div class="font-controls">
-          <button class="footer-btn" id="btnFontDec">
+          <button class="footer-btn" id="btnFontDec" aria-label="Decrease font size">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           </button>
           <span class="font-display" id="fontSizeDisplay">24px</span>
-          <button class="footer-btn" id="btnFontInc">
+          <button class="footer-btn" id="btnFontInc" aria-label="Increase font size">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
@@ -250,6 +256,13 @@
           <option value="C">Speaker C</option>
           <option value="D">Speaker D</option>
         </select>
+        <div id="learnedLabelContainer" class="learned-label-container" style="display:none; margin-top: 0.5rem;">
+          <span class="learned-label-badge">Learned: <span id="learnedLabelValue">None</span></span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="mergeThreshold">Merge Threshold: <span id="mergeThresholdDisplay" class="delay-value">2.0</span>s</label>
+        <input type="range" id="mergeThreshold" min="0.5" max="5.0" step="0.1" value="2.0">
       </div>
       <button id="btnCalibrate" class="btn-save secondary" style="margin-top:0;">Recalibrate Voice Signature</button>
       <button id="btnSaveSettings" class="btn-save">Save & Reconnect</button>

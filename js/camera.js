@@ -2,10 +2,16 @@ export class CameraManager {
     /**
      * @param {HTMLVideoElement} videoEl - The video element for the feed.
      */
-    constructor(videoEl) {
+    constructor(videoEl, eventBus) {
         this.stream = null;
         this.videoEl = videoEl;
+        this.eventBus = eventBus;
         this.canvas = document.createElement('canvas');
+
+        if (this.eventBus) {
+            this.eventBus.on('camera:start', () => this.start());
+            this.eventBus.on('camera:stop', () => this.stop());
+        }
     }
 
     async start() {

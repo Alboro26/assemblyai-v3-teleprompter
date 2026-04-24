@@ -13,16 +13,71 @@ export class STTManager {
     this.recogActive = false;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 3;
+
+    // Calibration State
+    this.isCalibrating = false;
+    this.calibrationLabels = [];
+    this.calibrationInterval = null;
+
+    // Turn State (AssemblyAI v3)
+    this.turnBuffer = '';
+    this.recentTurns = []; // History for reconciliation (v3)
+    this._stagedTurnTimeout = null;
+
+    // Decoupled Control Listeners
+    this.eventBus.on('stt:start-calibration', () => this.startCalibration());
+    this.eventBus.on('stt:stop-calibration', () => this.stopCalibration());
+    this.eventBus.on('stt:connect', () => this.connect());
+    this.eventBus.on('stt:disconnect', () => this.disconnect());
+    this.eventBus.on('stt:set-paused', (data) => this.setPaused(data.paused));
+    this.eventBus.on('stt:set-engine', (data) => this.setEngine(data.mode, data.connect));
   }
 
   startCalibration() {
-    console.log('[STT] Calibration started (Stub)');
-    // TODO: Implement actual voice fingerprinting logic
+    console.log('[STT] Calibration started...');
+    this.calibrationLabels = [];
+    this.isCalibrating = true;
+
+    let duration = 10000;
+    let elapsed = 0;
+    let step = 100;
+
+    if (this.calibrationInterval) clearInterval(this.calibrationInterval);
+    this.calibrationInterval = setInterval(() => {
+      elapsed += step;
+      const remaining = Math.max(0, Math.ceil((duration - elapsed) / 1000));
+      const progress = (elapsed / duration) * 100;
+
+      this.eventBus.emit('calibration:progress', {
+        remaining,
+        progress
+      });
+
+      if (elapsed >= duration) {
+        this.stopCalibration();
+      }
+    }, step);
   }
 
   stopCalibration() {
-    console.log('[STT] Calibration stopped (Stub)');
-    // TODO: Implement actual voice fingerprinting logic
+    if (!this.isCalibrating) return; // Already stopped
+    this.isCalibrating = false;
+    clearInterval(this.calibrationInterval);
+
+    if (this.calibrationLabels.length === 0) {
+      console.warn('[STT] Calibration failed: No speakers detected.');
+      this.eventBus.emit('calibration:complete', { label: null });
+      return;
+    }
+
+    // Identify the most frequent speaker label
+    const counts = {};
+    this.calibrationLabels.forEach(l => counts[l] = (counts[l] || 0) + 1);
+    const winningLabel = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+
+    console.log(`[STT] Calibration complete. User Label: ${winningLabel}`, counts);
+    this.eventBus.emit('calibration:complete', { label: winningLabel });
+    this.calibrationLabels = [];
   }
 
   setAudioEngine(engine) {
@@ -103,27 +158,134 @@ export class STTManager {
 
   handleAssemblyMessage(msg) {
     if (this.isPaused) return;
-    if (msg.type !== 'Turn') return;
 
-    const transcript = msg.transcript || "";
-    const isFinal = msg.end_of_turn === true || msg.message_type === 'FinalTranscript';
-    const rawLabel = msg.speaker !== undefined ? msg.speaker : msg.speaker_label;
+    const msgType = msg.type || msg.message_type;
+    const isTranscript = msgType === 'Turn' || msgType === 'PartialTranscript' || msgType === 'FinalTranscript' || msgType === 'SessionBegins';
+
+    if (!isTranscript) return;
+
+    // Normalize: v3 (u3-rt-pro) often uses 'text' instead of 'transcript'
+    const transcript = msg.text || msg.transcript || "";
+    const rawLabel = msg.speaker_label || msg.speaker;
+
+    // If calibrating, capture the label
+    if (this.isCalibrating && rawLabel !== undefined && rawLabel !== null) {
+      this.calibrationLabels.push(rawLabel);
+    }
 
     if (!transcript.trim()) return;
 
-    if (!isFinal) {
-      this.eventBus.emit('stt:interim', transcript);
-    } else {
-      this.eventBus.emit('stt:final', { text: transcript, rawLabel });
+    // ASSEMBLYAI V3 PROTOCOL HANDLING:
+    // PartialTranscript: Interim results for the current fragment.
+    // FinalTranscript: Stabilized text for the current fragment (lock into buffer).
+    // Turn: The full speaker turn has finished (promote buffer to final).
+
+    if (msgType === 'PartialTranscript') {
+      // Show everything stabilized so far + the current moving fragment
+      const fullInterim = (this.turnBuffer + " " + transcript).trim();
+      this.eventBus.emit('stt:interim', fullInterim);
+    }
+    else if (msgType === 'FinalTranscript') {
+      // Accumulate this fragment into the turn buffer
+      this.turnBuffer += (this.turnBuffer ? " " : "") + transcript;
+      this.eventBus.emit('stt:interim', this.turnBuffer.trim());
+    }
+    else if (msgType === 'Turn') {
+      const fullTurnText = (msg.transcript || this.turnBuffer || transcript).trim();
+      const now = Date.now();
+
+      // ADVANCED TURN RECONCILIATION (v2):
+      // Check if this turn is a correction/extension of any recent turn.
+      let replaceLast = false;
+      let matchedTurn = null;
+
+      const cleanNew = fullTurnText.toLowerCase().replace(/[^\w\s]/g, '').trim();
+
+      // Look back through the last 3 turns within a 5-second window
+      for (let i = this.recentTurns.length - 1; i >= 0; i--) {
+        const prev = this.recentTurns[i];
+        if (now - prev.timestamp > 5000) continue;
+
+        const cleanPrev = prev.text.toLowerCase().replace(/[^\w\s]/g, '').trim();
+        const similarity = this._getSimilarity(cleanNew, cleanPrev);
+        
+        // AGGRESSIVE MATCHING (v3):
+        // 1. High similarity (>50% word overlap)
+        // 2. Inclusion (One contains the other)
+        // 3. Shared Prefix (Start with same 2 words) within a short window
+        const wordsNew = cleanNew.split(/\s+/);
+        const wordsPrev = cleanPrev.split(/\s+/);
+        const sharedPrefix = wordsNew.length >= 2 && wordsPrev.length >= 2 && 
+                            wordsNew[0] === wordsPrev[0] && wordsNew[1] === wordsPrev[1];
+
+        const isOverlap = similarity > 0.5 || 
+                         cleanNew.includes(cleanPrev) || 
+                         cleanPrev.includes(cleanNew) ||
+                         (sharedPrefix && (now - prev.timestamp < 3000));
+
+        if (isOverlap && cleanPrev.length > 0) {
+          console.log(`[STT] Reconciled (v3): "${cleanNew}" vs "${cleanPrev}" (Sim: ${similarity.toFixed(2)}, Prefix: ${sharedPrefix})`);
+          replaceLast = true;
+          matchedTurn = prev;
+          break;
+        }
+      }
+
+      const finalData = { 
+        text: fullTurnText, 
+        rawLabel,
+        replaceLast,
+        originalTimestamp: replaceLast ? matchedTurn.timestamp : now
+      };
+
+      // TURN STAGING (Anti-Flicker):
+      // If this is a brand new turn, wait 200ms to see if a correction/replacement arrives.
+      // This prevents the "Yellow then Purple" flicker common in v3.
+      if (!replaceLast) {
+        if (this._stagedTurnTimeout) clearTimeout(this._stagedTurnTimeout);
+        this._stagedTurnTimeout = setTimeout(() => {
+          this.eventBus.emit('stt:final', finalData);
+          this._stagedTurnTimeout = null;
+        }, 250);
+      } else {
+        // Replacement turns are emitted immediately to overwrite the staged or previous turn
+        if (this._stagedTurnTimeout) clearTimeout(this._stagedTurnTimeout);
+        this.eventBus.emit('stt:final', finalData);
+      }
+
+      // Update Reconciliation History
+      if (replaceLast && matchedTurn) {
+        matchedTurn.text = fullTurnText;
+        matchedTurn.label = rawLabel;
+      } else {
+        this.recentTurns.push({ text: fullTurnText, timestamp: now, label: rawLabel });
+        if (this.recentTurns.length > 5) this.recentTurns.shift();
+      }
+
+      this.turnBuffer = ''; 
     }
   }
 
-  startWorkletStreaming() {
-    console.log('[STT] Starting Worklet Streaming check...', { 
-      hasEngine: !!this.audioEngine, 
-      hasWorklet: !!(this.audioEngine && this.audioEngine.workletNode) 
-    });
+  /**
+   * Jaccard Similarity on word sets
+   */
+  _getSimilarity(s1, s2) {
+    const w1 = s1.split(/\s+/).filter(x => x);
+    const w2 = s2.split(/\s+/).filter(x => x);
+    if (w1.length === 0 || w2.length === 0) return 0;
     
+    const set1 = new Set(w1);
+    const set2 = new Set(w2);
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    return intersection.size / Math.max(set1.size, set2.size);
+  }
+
+  startWorkletStreaming() {
+    console.log('[STT] Starting Worklet Streaming check...', {
+      hasEngine: !!this.audioEngine,
+      hasWorklet: !!(this.audioEngine && this.audioEngine.workletNode)
+    });
+
     if (!this.audioEngine || !this.audioEngine.workletNode) {
       console.warn('[STT] No AudioWorklet found.');
       return;
@@ -186,9 +348,11 @@ export class STTManager {
         const res = e.results[i];
         if (res.isFinal) {
           const text = res[0].transcript.trim();
+          if (this.isCalibrating) this.calibrationLabels.push('LOCAL');
           this.eventBus.emit('stt:final', { text, rawLabel: 'LOCAL' });
         } else {
           interim += res[0].transcript;
+          if (this.isCalibrating) this.calibrationLabels.push('LOCAL');
         }
       }
       if (interim) this.eventBus.emit('stt:interim', interim);
@@ -216,6 +380,14 @@ export class STTManager {
     } else {
       if (connect) this.initLocal();
     }
+  }
+
+  connect() {
+    this.start();
+  }
+
+  disconnect() {
+    this.stopAll();
   }
 
   start() {
