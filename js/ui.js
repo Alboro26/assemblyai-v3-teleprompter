@@ -187,8 +187,11 @@ class AppController {
 
   _bind(id, event, fn) {
     const el = document.getElementById(id);
-    if (el) el[event] = fn;
-    else console.warn(`Missing element for binding: ${id}`);
+    if (el) {
+      el[event] = fn;
+    } else {
+      console.warn(`[UI] Optional binding skipped: ${id} not in DOM`);
+    }
   }
 
   populateModelDropdowns() {
@@ -227,11 +230,21 @@ class AppController {
       if (toggle) toggle.checked = !freeMode;
       this.toggleModelMode(false);
 
-      document.getElementById('jobDescription').value = StorageService.get(StorageService.KEYS.JOB_DESCRIPTION, '');
-      document.getElementById('resumeText').value = StorageService.get(StorageService.KEYS.RESUME_TEXT, '');
-      document.getElementById('aiDelay').value = this.state.aiTriggerDelay || 2.0;
-      document.getElementById('voiceThreshold').value = this.state.voiceThreshold;
-      document.getElementById('noiseFloor').value = this.state.noiseFloorThreshold;
+      const jobDesc = document.getElementById('jobDescription');
+      if (jobDesc) jobDesc.value = StorageService.get(StorageService.KEYS.JOB_DESCRIPTION, '');
+      
+      const resume = document.getElementById('resumeText');
+      if (resume) resume.value = StorageService.get(StorageService.KEYS.RESUME_TEXT, '');
+      
+      const aiDelay = document.getElementById('aiDelay');
+      if (aiDelay) aiDelay.value = this.state.aiTriggerDelay || 2.0;
+      
+      const vThresh = document.getElementById('voiceThreshold');
+      if (vThresh) vThresh.value = this.state.voiceThreshold;
+      
+      const nFloor = document.getElementById('noiseFloor');
+      if (nFloor) nFloor.value = this.state.noiseFloorThreshold;
+
       const mergeEl = document.getElementById('mergeThreshold');
       if (mergeEl) mergeEl.value = this.state.mergeThreshold || 1.5;
 
@@ -481,7 +494,7 @@ class AppController {
   updateCalibrationUI() {
     const btn = document.getElementById('btnCalibrate');
     if (btn) {
-      btn.textContent = this.state.calibrationComplete ? 'RE-CALIBRATE' : 'CALIBRATE VOICE';
+      btn.textContent = this.state.calibrationComplete ? 'Recalibrate Voice' : 'Calibrate Voice';
       btn.classList.toggle('complete', this.state.calibrationComplete);
     }
   }
@@ -537,6 +550,7 @@ class AppController {
 
   handleFinalTranscript(data) {
     const { text, rawLabel } = data;
+    const history = this.state.conversationHistory;
     const el = document.getElementById('interimText');
     if (el) {
       el.textContent = '';
@@ -571,33 +585,18 @@ class AppController {
 
     // DIARIZATION CORRECTION (Targeted Retraction): 
     // If STT detected an overlap/correction, remove the specific turn being replaced.
-    if (data.replaceLast && this.state.conversationHistory.length > 0) {
-      const history = this.state.conversationHistory;
-      let found = false;
+    if (data.replaceLast && history.length > 0) {
       // Search for the specific turn matching the immutable startTime
-      for (let i = history.length - 1; i >= 0; i--) {
-        if (history[i].startTime === data.originalTimestamp) {
-          const removed = history.splice(i, 1)[0];
-          console.log(`[UI] Correcting diarization: Removed targeted turn "${removed.content.substring(0, 20)}..."`);
-          found = true;
-          break;
-        }
-      }
-      // Fallback: If no exact timestamp match, remove the last speaker turn
-      if (!found) {
-        for (let i = history.length - 1; i >= 0; i--) {
-          if (history[i].role !== ROLES.ASSISTANT) {
-            const removed = history.splice(i, 1)[0];
-            console.log(`[UI] Correcting diarization: Removed last speaker turn (fallback) "${removed.content.substring(0, 20)}..."`);
-            break;
-          }
-        }
+      const index = history.findIndex(e => e.startTime === data.originalTimestamp);
+      if (index !== -1) {
+        const removed = history.splice(index, 1)[0];
+        console.log(`[UI] Correcting diarization: Removed targeted turn "${removed.content.substring(0, 20)}..."`);
+      } else {
+        console.warn(`[UI] Correction target not found (TS: ${data.originalTimestamp}) – preserving history to prevent duplicates.`);
       }
     }
 
     // SMART MERGE LOGIC (Deterministic Gap Merging)
-    const history = this.state.conversationHistory;
-    const mergeThreshold = APP_CONFIG.MERGE_THRESHOLD_MS;
     let lastHumanEntry = null;
     let lastHumanIndex = -1;
 
@@ -621,35 +620,50 @@ class AppController {
       }
     }
 
-    // 3. Deterministic Merge Decision
-    // Allow merging if roles match EXACTLY or if one of them is NEUTRAL (speaker unknown)
-    const rolesMatch = lastHumanEntry && (
-      lastHumanEntry.role === aiRole ||
-      lastHumanEntry.role === ROLES.NEUTRAL ||
-      aiRole === ROLES.NEUTRAL
-    );
-
+    // 3. Deterministic Merge Decision (Hybrid Gap Detection)
+    const mergeThreshold = this.state.mergeThreshold * 1000 || APP_CONFIG.MERGE_THRESHOLD_MS;
+    let effectiveGap = null;
     let shouldMerge = false;
-    if (lastHumanEntry && rolesMatch && !aiInterleaved) {
-      const gap = data.audioStart - lastHumanEntry.audioEnd;
-      if (gap <= mergeThreshold) {
-        shouldMerge = true;
+
+    if (data.audioStart > 0 && lastHumanEntry.audioEnd > 0) {
+      effectiveGap = data.audioStart - lastHumanEntry.audioEnd;
+    } else {
+      // Fallback to system time difference (safe for zeroed STT timestamps)
+      effectiveGap = now - lastHumanEntry.lastUpdate;
+    }
+
+    if (effectiveGap === null) effectiveGap = Infinity;
+
+    // --- Merge decision ---
+    let mergeAllowed = false;
+    if (lastHumanEntry && !aiInterleaved && effectiveGap <= mergeThreshold) {
+      // Role-specific thresholds: Stricter for unidentified (neutral) turns
+      if (aiRole === ROLES.NEUTRAL || lastHumanEntry.role === ROLES.NEUTRAL) {
+        mergeAllowed = (effectiveGap <= (APP_CONFIG.MERGE_NEUTRAL_THRESHOLD || 500));
+      } else {
+        // Identified roles: Merge if they match
+        mergeAllowed = (lastHumanEntry.role === aiRole);
       }
     }
 
-    if (shouldMerge) {
-      console.log(`[UI] Deterministic Merge: Gap=${data.audioStart - lastHumanEntry.audioEnd}ms | Role Upgrade: ${lastHumanEntry.role}->${aiRole}`);
+    if (mergeAllowed) {
+      console.log(`[UI] Deterministic Merge: Gap=${effectiveGap}ms | Role Upgrade: ${lastHumanEntry.role}->${aiRole}`);
+      
+      const originalStart = lastHumanEntry.startTime; // PRESERVE IMMUTABLE IDENTITY
       lastHumanEntry.content += ' ' + text;
       lastHumanEntry.audioEnd = data.audioEnd;
       lastHumanEntry.lastUpdate = now;
+      lastHumanEntry.startTime = originalStart;
 
       // "Claim" the neutral turn: If we merged an identified role into a neutral turn, 
       // or vice-versa, upgrade the entry to the identified role.
       if (lastHumanEntry.role === ROLES.NEUTRAL && aiRole !== ROLES.NEUTRAL) {
         lastHumanEntry.role = aiRole;
       }
+      
+      shouldMerge = true;
     } else {
-      console.log(`[UI] Finalizing: Creating new entry for ${aiRole}`);
+      console.log(`[UI] Finalizing: Creating new entry for ${aiRole} (Gap: ${effectiveGap}ms)`);
       this.state.conversationHistory.push({
         role: aiRole,
         content: text,
@@ -670,19 +684,18 @@ class AppController {
     this.renderTranscript();
     this.eventBus.emit(EVENTS.AI_UPDATE_HISTORY, { history: this.state.conversationHistory });
 
-    // Trigger AI if it's the interviewer speaking
-    if (aiRole === ROLES.INTERVIEWER) {
+    // 4. SMART AI TRIGGER: Determine if we should ask for a suggestion
+    const finalEntry = shouldMerge ? lastHumanEntry : history[history.length - 1];
+    
+    const shouldTriggerAI = (
+      (finalEntry.role === ROLES.INTERVIEWER) ||
+      (finalEntry.role === ROLES.NEUTRAL && history.some(e => e.role === ROLES.INTERVIEWER))
+    );
+
+    if (shouldTriggerAI) {
       this.requestAISuggestion();
-    } else if (aiRole === ROLES.CANDIDATE) {
-      // If it's a candidate turn, cancel any pending suggestions triggered by a previously misidentified interviewer turn
-      if (this._aiTriggerTimeout) {
-        clearTimeout(this._aiTriggerTimeout);
-        this._aiTriggerTimeout = null;
-        this.eventBus.emit(EVENTS.AI_ABORT);
-        console.log('[UI] Cancelled pending AI suggestion (Speaker flipped to Candidate)');
-      }
-    } else if (aiRole === ROLES.NEUTRAL) {
-      console.log('[UI] Neutral turn - inhibiting AI suggestion');
+    } else if (finalEntry.role === ROLES.NEUTRAL) {
+      console.log('[UI] Standalone neutral turn - inhibiting AI suggestion');
     }
 
     // Auto-scroll history

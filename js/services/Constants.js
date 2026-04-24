@@ -34,5 +34,6 @@ export const APP_CONFIG = {
   AI_CONTEXT_LIMIT: 20,
   HISTORY_LIMIT: 50,
   MERGE_THRESHOLD_MS: 1500, // Deterministic gap for smart wrapping
+  MERGE_NEUTRAL_THRESHOLD: 500, // ms
   INTERLEAVING_POLICY: 'break' // 'break' or 'allow' merging around AI turns
 };

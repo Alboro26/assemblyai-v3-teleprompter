@@ -543,6 +543,14 @@ html, body {
   align-self: flex-start;
 }
 
+.transcript-entry.neutral {
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid #64748b;
+  color: #94a3b8;
+  font-style: italic;
+  align-self: flex-start;
+}
+
 .teleprompter-panel {
   flex: 1;
   display: flex;
@@ -854,19 +862,34 @@ html, body {
 
 .btn-save {
   width: 100%;
-  padding: 1rem;
-  background: var(--success);
+  padding: 0.85rem 1.5rem;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
   color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-weight: 700;
-  font-size: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
   cursor: pointer;
   margin-top: 1rem;
-  margin-bottom: 1rem;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 0.5rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(109, 40, 217, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
-.btn-save:active { transform: scale(0.96); }
+
+.btn-save:hover {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(109, 40, 217, 0.35);
+}
+
+.btn-save:active {
+  transform: translateY(0) scale(0.98);
+}
 .btn-float-capture:active, .btn-float-solve:active, .btn-float-cycle:active { transform: scale(0.94); }
 
 .start-overlay {

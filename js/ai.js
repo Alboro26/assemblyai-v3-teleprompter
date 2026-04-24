@@ -102,9 +102,10 @@ export class AIService {
   }
 
   async generateResponse(jobDesc, resumeText, imageData = null, userPrompt = null) {
-    if (this.isRunning) {
-      console.warn('[AI] Request ignored: Generation already in progress.');
-      return;
+    // If already running, abort the previous one to prioritize the new context
+    if (this.isRunning && this._abortController) {
+      console.log('[AI] Aborting in-flight request for new context...');
+      this._abortController.abort();
     }
 
     try {
@@ -126,8 +127,7 @@ export class AIService {
       this.isRunning = true;
       if (this.eventBus) this.eventBus.emit(EVENTS.STATUS_CHANGE, { text: 'AI Thinking...', type: 'loading' });
 
-      // Abort previous if still in flight
-      if (this._abortController) this._abortController.abort();
+      // Create new abort controller for this specific request
       this._abortController = new AbortController();
 
       const res = await fetch('/.netlify/functions/openrouter-proxy', {
@@ -150,6 +150,10 @@ export class AIService {
       if (this.eventBus) this.eventBus.emit(EVENTS.STATUS_CHANGE, { text: 'Suggestion ready', type: 'ok' });
 
     } catch (e) {
+      if (e.name === 'AbortError') {
+        console.log('[AI] Request aborted (superseded by new context)');
+        return;
+      }
       console.error('[AI] Suggestion error:', e);
       if (this.eventBus) {
         this.eventBus.emit(EVENTS.STATUS_CHANGE, { 
