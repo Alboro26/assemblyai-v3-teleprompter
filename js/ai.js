@@ -27,14 +27,7 @@ export class AIService {
     this.eventBus.on('ai:set-mode', data => {
       this.setMode(data.isFree);
     });
-    this.eventBus.on(EVENTS.AI_ABORT, () => {
-      if (this._abortController) {
-        this._abortController.abort();
-        this._abortController = null;
-        this.isRunning = false;
-        console.log('[AI] Request aborted by signal');
-      }
-    });
+    this.eventBus.on(EVENTS.AI_ABORT, () => this.abort());
     this.eventBus.on(EVENTS.AI_GET_LAST_CONTEXT, (data) => {
       const liveContext = this.getLiveContext(data?.jobDesc, data?.resumeText);
       this.eventBus.emit(EVENTS.AI_CONTEXT_DATA, liveContext);
@@ -46,6 +39,15 @@ export class AIService {
 
   setMode(isFree) {
     this.isFreeMode = isFree;
+  }
+
+  abort() {
+    if (this._abortController) {
+      console.log('[AI] Explicit abort triggered');
+      this._abortController.abort();
+      this._abortController = null;
+      this.isRunning = false;
+    }
   }
 
   updateHistory(history) {

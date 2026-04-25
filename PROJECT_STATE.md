@@ -1,21 +1,22 @@
 # Project State Summary: Interview Teleprompter Modernization
 
 **Last Updated**: 2026-04-24
-**Current Status**: Stable / Modernized (Logic & Connectivity)
+**Current Status**: UI Persistence & Inspector Refactor (Next)
 
-- **Role-Flexible Merging**: Resolved the "staircase effect" by allowing `neutral` turns to be absorbed into identified speaker turns. Implemented "Role Upgrading" where a neutral entry is claimed by the first identified speaker that merges with it.
-- **Defensive UI Initialization**: Patched a critical render-blocking crash in `loadConfig`. The app now gracefully handles missing DOM elements, ensuring the transcript history renders even if the PWA cache is stale.
-- **Deterministic Smart Wrapping**: Standardized on audio-timestamp-based merging, eliminating arrival-time jitter.
+## ✅ Accomplishments
+- **Defensive UI Hardening**: Resolved the "Single Point of Failure" in the settings system. Both `saveSettings` and `loadConfig` are now fully null-safe, preventing DOM-mismatch crashes.
+- **Infrastructure Ready**: `Constants.js` updated to support `LEARNED_CANDIDATE_LABEL` and `INTERVIEWER_LABEL_OVERRIDE` for session-level identity persistence.
+- **The Global Flip**: Implemented retroactive role synchronization and surgical, flicker-free UI updates in `ui.js`.
+- **AI Kill Switch**: Finalized `AIService.abort()` for robust credit protection during role corrections.
 
-## Known Issues & Technical Debt
-- **Inspection Lag**: The "Raw AI Context" viewer displays a snapshot of the last *triggered* request. If an AI request is cancelled, the viewer displays stale data.
-- **Assistant-Aware Merging**: Currently, AI turns always break a human merge chain. We may want to explore allowing merges "through" an AI turn if the gap is small.
-
-## 🛠️ Key Architectural Decisions
-- **Audio-Offset Identity**: Using `audioStart` as the deterministic identity for a turn, while keeping `startTime` (system time) for UI sorting and PWA state.
-- **Surgical Scroll**: The UI now strictly targets the outer scrollable container (`#transcriptHistory`) for all positioning logic.
+## 🛠️ Architectural Decisions
+- **Session-Level Orchestration**: Moving away from "reactive" bubble-by-bubble correction to "proactive" identity locking. Once a speaker is identified, the system retroactively corrects the entire session history.
+- **Inclusive Interviewer Mapping**: Standardized on a "Candidate-First" model where anyone not the candidate is treated as an interviewer, with an optional "Neutral Filter" for noise.
 
 ## 🚀 Next Steps / Pending
+- **UI Persistence Badge**: Add a visual indicator to show which speaker label is currently "Locked" as the Candidate.
 - **Inspector Refactor**: Move the AI Context modal to a "Live Preview" pattern that polls the current history rather than a static snapshot.
-- **Diarization Engine Audit**: Perform a stress test on high-frequency speaker switches to verify atomic state transitions.
-- **Deployment**: Push `dev-merged` to main and verify PWA caching for the new metadata fields.
+
+## Known Issues & Technical Debt
+- **PWA Cache Ghosting**: Service Worker may serve stale `index.html` versions. (Mitigation: Added defensive null-checks in JS to prevent crashes).
+- **Inspection Lag**: The "Raw AI Context" viewer displays a snapshot of the last *triggered* request.

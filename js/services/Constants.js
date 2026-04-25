@@ -13,6 +13,7 @@ export const ROLES = {
 export const STORAGE_KEYS = {
   CONVERSATION_HISTORY: 'conversationHistory',
   CANDIDATE_LABEL_OVERRIDE: 'candidateLabelOverride',
+  INTERVIEWER_LABEL_OVERRIDE: 'interviewerLabelOverride',
   LEARNED_CANDIDATE_LABEL: 'learnedCandidateLabel',
   MERGE_THRESHOLD: 'mergeThreshold'
 };

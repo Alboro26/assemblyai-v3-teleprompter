@@ -55,6 +55,7 @@ class AppController {
       currentMode: 'voice', // Default mode
       lastCapturedImage: null, // Buffer for multimodal AI
       isCandidateSpeaking: false,
+      interviewerLabelOverride: StorageService.get(StorageService.KEYS.INTERVIEWER_LABEL_OVERRIDE, null),
       pendingSuggestion: null
     };
 
@@ -258,6 +259,9 @@ class AppController {
       const candSel = document.getElementById('candidateSpeaker');
       if (candSel) candSel.value = candidateLabel;
 
+      this.state.interviewerLabelOverride = StorageService.get(StorageService.KEYS.INTERVIEWER_LABEL_OVERRIDE, null);
+      this.state.learnedCandidateLabel = StorageService.get(StorageService.KEYS.LEARNED_CANDIDATE_LABEL, null);
+
       this.renderTranscript();
     } catch (e) {
       console.error("Config load error:", e);
@@ -265,24 +269,48 @@ class AppController {
   }
 
   saveSettings() {
-    this.state.aiTriggerDelay = parseFloat(document.getElementById('aiDelay').value);
-    this.state.voiceThreshold = parseFloat(document.getElementById('voiceThreshold').value);
-    this.state.noiseFloorThreshold = parseInt(document.getElementById('noiseFloor').value);
+    try {
+      // 1. Numeric Fields with parse safety
+      const aiDelayEl = document.getElementById('aiDelay');
+      if (aiDelayEl) this.state.aiTriggerDelay = parseFloat(aiDelayEl.value) || 2.0;
 
-    StorageService.set(StorageService.KEYS.JOB_DESCRIPTION, document.getElementById('jobDescription').value);
-    StorageService.set(StorageService.KEYS.RESUME_TEXT, document.getElementById('resumeText').value);
-    StorageService.set(StorageService.KEYS.VOICE_THRESHOLD, this.state.voiceThreshold);
-    StorageService.set(StorageService.KEYS.NOISE_FLOOR_THRESHOLD, this.state.noiseFloorThreshold);
-    this.state.mergeThreshold = parseFloat(document.getElementById('mergeThreshold').value);
-    StorageService.set(StorageService.KEYS.MERGE_THRESHOLD, this.state.mergeThreshold);
+      const vThreshEl = document.getElementById('voiceThreshold');
+      if (vThreshEl) {
+        this.state.voiceThreshold = parseFloat(vThreshEl.value) || 0.60;
+        StorageService.set(StorageService.KEYS.VOICE_THRESHOLD, this.state.voiceThreshold);
+      }
 
-    const candSel = document.getElementById('candidateSpeaker');
-    if (candSel) {
-      StorageService.set(StorageService.KEYS.CANDIDATE_LABEL_OVERRIDE, candSel.value);
+      const nFloorEl = document.getElementById('noiseFloor');
+      if (nFloorEl) {
+        this.state.noiseFloorThreshold = parseInt(nFloorEl.value) || 12;
+        StorageService.set(StorageService.KEYS.NOISE_FLOOR_THRESHOLD, this.state.noiseFloorThreshold);
+      }
+
+      const mergeEl = document.getElementById('mergeThreshold');
+      if (mergeEl) {
+        this.state.mergeThreshold = parseFloat(mergeEl.value) || 1.5;
+        StorageService.set(StorageService.KEYS.MERGE_THRESHOLD, this.state.mergeThreshold);
+      }
+
+      // 2. Text Fields
+      const jobDescEl = document.getElementById('jobDescription');
+      if (jobDescEl) StorageService.set(StorageService.KEYS.JOB_DESCRIPTION, jobDescEl.value);
+
+      const resumeEl = document.getElementById('resumeText');
+      if (resumeEl) StorageService.set(StorageService.KEYS.RESUME_TEXT, resumeEl.value);
+
+      // 3. Selection Fields
+      const candSel = document.getElementById('candidateSpeaker');
+      if (candSel) {
+        StorageService.set(StorageService.KEYS.CANDIDATE_LABEL_OVERRIDE, candSel.value);
+      }
+    } catch (e) {
+      console.warn("[UI] Partial settings save failure (graceful degradation):", e);
+    } finally {
+      // 4. UI Integrity Guarantee: Always close modal and provide feedback
+      this.toggleSettings(false);
+      this.eventBus.emit('ui:show-toast', { message: 'Settings Saved' });
     }
-
-    this.toggleSettings(false);
-    this.eventBus.emit('ui:show-toast', { message: 'Settings Saved' });
   }
 
   updateStatus(type, text) {
@@ -550,6 +578,32 @@ class AppController {
     }
   }
 
+  identifyRole(label) {
+    if (!label || label === 'UNKNOWN') return ROLES.NEUTRAL;
+    
+    const sRaw = String(label).toLowerCase().replace(/speaker\s*/, '').trim();
+
+    // 1. Check interviewer override (Global Priority)
+    if (this.state.interviewerLabelOverride) {
+      return (sRaw === this.state.interviewerLabelOverride) ? ROLES.INTERVIEWER : ROLES.CANDIDATE;
+    }
+
+    // 2. Check session-learned label
+    if (this.state.learnedCandidateLabel) {
+      return (sRaw === this.state.learnedCandidateLabel) ? ROLES.CANDIDATE : ROLES.INTERVIEWER;
+    }
+
+    // 3. Check explicit candidate setting
+    const candidateLabel = StorageService.get(StorageService.KEYS.CANDIDATE_LABEL_OVERRIDE, 'auto');
+    if (candidateLabel !== 'auto') {
+      const sCand = String(candidateLabel).toLowerCase().replace(/speaker\s*/, '').trim();
+      return (sRaw === sCand) ? ROLES.CANDIDATE : ROLES.INTERVIEWER;
+    }
+
+    // 4. Default to Interviewer (Safety first for suggestions)
+    return ROLES.INTERVIEWER;
+  }
+
   handleFinalTranscript(data) {
     const { text, rawLabel } = data;
     const history = this.state.conversationHistory;
@@ -561,28 +615,9 @@ class AppController {
 
     const now = data.originalTimestamp || Date.now();
 
-    // Improved Role Identification
-    const candidateLabel = StorageService.get(StorageService.KEYS.CANDIDATE_LABEL_OVERRIDE, 'auto');
-    let role = ROLES.INTERVIEWER;
-
-    if (rawLabel !== undefined && rawLabel !== null && rawLabel !== 'UNKNOWN') {
-      const sRaw = String(rawLabel).toLowerCase().replace(/speaker\s*/, '').trim();
-
-      // 1. Check explicit setting
-      if (candidateLabel !== 'auto') {
-        const sCand = String(candidateLabel).toLowerCase().replace(/speaker\s*/, '').trim();
-        if (sRaw === sCand) role = ROLES.CANDIDATE;
-      }
-      // 2. Check session-learned label
-      else if (this.state.learnedCandidateLabel === sRaw) {
-        role = ROLES.CANDIDATE;
-      }
-    } else {
-      // 📌 Stage as NEUTRAL – awaiting speaker confirmation
-      role = ROLES.NEUTRAL;
-    }
-
-    const aiRole = role; 
+    // Centralized Role Identification
+    const aiRole = this.identifyRole(rawLabel);
+    
     console.log(`[UI] Classification: raw=${rawLabel} -> role=${aiRole} (learned=${this.state.learnedCandidateLabel})`);
 
     // DIARIZATION CORRECTION (Targeted Retraction): 
@@ -627,11 +662,13 @@ class AppController {
     let effectiveGap = null;
     let shouldMerge = false;
 
-    if (data.audioStart > 0 && lastHumanEntry.audioEnd > 0) {
-      effectiveGap = data.audioStart - lastHumanEntry.audioEnd;
-    } else {
-      // Fallback to system time difference (safe for zeroed STT timestamps)
-      effectiveGap = now - lastHumanEntry.lastUpdate;
+    if (lastHumanEntry) {
+      if (data.audioStart > 0 && lastHumanEntry.audioEnd > 0) {
+        effectiveGap = data.audioStart - lastHumanEntry.audioEnd;
+      } else {
+        // Fallback to system time difference (safe for zeroed STT timestamps)
+        effectiveGap = now - (lastHumanEntry.lastUpdate || now);
+      }
     }
 
     if (effectiveGap === null) effectiveGap = Infinity;
@@ -784,6 +821,8 @@ class AppController {
       if (entry.role === ROLES.ASSISTANT) return;
       const p = document.createElement('p');
       p.className = `transcript-entry ${entry.role}`;
+      p.setAttribute('data-index', idx);
+      if (entry.rawLabel) p.setAttribute('data-speaker', entry.rawLabel);
       p.textContent = entry.content;
       p.onclick = () => this.toggleEntryRole(idx);
       hist.appendChild(p);
@@ -797,20 +836,60 @@ class AppController {
 
     // Toggle: candidate <-> interviewer
     const oldRole = entry.role;
-    entry.role = (oldRole === ROLES.CANDIDATE) ? ROLES.INTERVIEWER : ROLES.CANDIDATE;
+    const newRole = (oldRole === ROLES.CANDIDATE) ? ROLES.INTERVIEWER : ROLES.CANDIDATE;
+    entry.role = newRole;
 
-    // LEARN: If candidate manually identified a speaker label, remember it for this session
-    if (entry.role === ROLES.CANDIDATE && entry.rawLabel && entry.rawLabel !== 'UNKNOWN') {
+    // LEARN & GLOBAL FLIP
+    if (entry.rawLabel && entry.rawLabel !== 'UNKNOWN') {
       const sRaw = String(entry.rawLabel).toLowerCase().replace(/speaker\s*/, '').trim();
-      this.state.learnedCandidateLabel = sRaw;
+      
+      if (newRole === ROLES.CANDIDATE) {
+        this.state.learnedCandidateLabel = sRaw;
+        this.state.interviewerLabelOverride = null; // Reset conflicting override
+        StorageService.set(StorageService.KEYS.LEARNED_CANDIDATE_LABEL, sRaw);
+        StorageService.remove(StorageService.KEYS.INTERVIEWER_LABEL_OVERRIDE);
+      } else {
+        this.state.interviewerLabelOverride = sRaw;
+        this.state.learnedCandidateLabel = null;
+        StorageService.set(StorageService.KEYS.INTERVIEWER_LABEL_OVERRIDE, sRaw);
+        StorageService.remove(StorageService.KEYS.LEARNED_CANDIDATE_LABEL);
+      }
+      
       this.updateLearnedLabelUI();
-      console.log(`[UI] Learned candidate label for session: ${sRaw}`);
+      console.log(`[UI] Learned ${newRole} label: ${sRaw}. Triggering Global Flip...`);
+
+      // Retroactive synchronization
+      this.state.conversationHistory.forEach(e => {
+        if (e.rawLabel === entry.rawLabel) {
+          e.role = newRole;
+        }
+      });
+
+      // Surgical DOM update to avoid flicker
+      const nodes = document.querySelectorAll(`.transcript-entry[data-speaker="${entry.rawLabel}"]`);
+      nodes.forEach(node => {
+        node.className = `transcript-entry ${newRole}`;
+      });
     }
+
+    // AI KILL SWITCH (Credit Protection)
+    if (newRole === ROLES.CANDIDATE) {
+      console.log('[UI] Role corrected to Candidate. Aborting pending AI request...');
+      this.eventBus.emit(EVENTS.AI_ABORT);
+      if (this._aiTriggerTimeout) {
+        clearTimeout(this._aiTriggerTimeout);
+        this._aiTriggerTimeout = null;
+      }
+    }
+
+    // Surgical DOM update for the toggled entry
+    const node = document.querySelector(`.transcript-entry[data-index="${index}"]`);
+    if (node) node.className = `transcript-entry ${newRole}`;
 
     console.log(`[UI] Toggled role for entry ${index}: ${oldRole} -> ${entry.role}`);
 
     StorageService.set(StorageService.KEYS.CONVERSATION_HISTORY, this.state.conversationHistory);
-    this.renderTranscript();
+    // this.renderTranscript(); // Removed to prevent flicker; surgical updates handled above
     this.eventBus.emit('ai:update-history', { history: this.state.conversationHistory });
 
     // If it was changed TO interviewer, trigger a new AI response
