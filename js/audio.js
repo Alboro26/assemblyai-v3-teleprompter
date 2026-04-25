@@ -10,6 +10,12 @@ export class AudioEngine {
     this.FFT_SIZE = 2048;
     this.config = config;
     this.voiceAnalyzer = new VoiceAnalyzer();
+    
+    // Phase 1: Pre-allocated buffers to prevent GC pressure
+    this._freqData = null;
+    this._timeData = null;
+    this._lastAnalysis = 0;
+    this._throttleMs = 200; // 200ms settle window
   }
 
   async init() {
@@ -44,6 +50,10 @@ export class AudioEngine {
       await this.audioCtx.resume();
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.FFT_SIZE;
+
+      // Initialize pre-allocated buffers
+      this._freqData = new Uint8Array(this.analyser.frequencyBinCount);
+      this._timeData = new Uint8Array(this.analyser.fftSize);
       
       const src = this.audioCtx.createMediaStreamSource(this.mediaStream);
       src.connect(this.analyser);
@@ -59,41 +69,64 @@ export class AudioEngine {
     }
   }
 
-  stop() {
+  async stop() {
+    console.log('[Audio] Stopping engine and releasing hardware locks...');
+    
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(t => t.stop());
       this.mediaStream = null;
     }
-    if (this.audioCtx && this.audioCtx.state !== 'closed') {
-      this.audioCtx.suspend();
-    }
-    if (this.analyser) {
-        this.analyser.disconnect();
-    }
+    
     if (this.workletNode) {
-        this.workletNode.disconnect();
+      this.workletNode.port.onmessage = null; // Prevent leak
+      this.workletNode.disconnect();
+      this.workletNode = null;
     }
-    console.log('[Audio] Engine stopped and resources released.');
+
+    if (this.analyser) {
+      this.analyser.disconnect();
+      this.analyser = null;
+    }
+
+    if (this.audioCtx && this.audioCtx.state !== 'closed') {
+      try {
+        // Deep Cleanup: Close context to release system resources/hardware lock
+        await this.audioCtx.close();
+        console.log('[Audio] AudioContext closed.');
+      } catch (e) {
+        console.warn('[Audio] Error closing AudioContext:', e);
+      }
+      this.audioCtx = null;
+    }
   }
 
   getRMS() {
-    if (!this.analyser) return 0;
-    const data = new Uint8Array(this.analyser.frequencyBinCount);
-    this.analyser.getByteFrequencyData(data);
-    return Math.sqrt(data.reduce((a, b) => a + b * b, 0) / data.length);
+    if (!this.analyser || !this._freqData) return 0;
+    
+    // Performance: reuse pre-allocated buffer
+    this.analyser.getByteFrequencyData(this._freqData);
+    return Math.sqrt(this._freqData.reduce((a, b) => a + b * b, 0) / this._freqData.length);
   }
 
   getFingerprint() {
-    if (!this.analyser) return null;
-    const data = new Uint8Array(this.analyser.frequencyBinCount);
-    this.analyser.getByteFrequencyData(data);
-    const timeData = new Uint8Array(this.analyser.fftSize);
-    this.analyser.getByteTimeDomainData(timeData);
+    if (!this.analyser || !this._freqData || !this._timeData) return null;
 
-    return {
-      fp: this.voiceAnalyzer.getMelEnergy(data, this.audioCtx.sampleRate, this.FFT_SIZE),
-      pitch: this.voiceAnalyzer.getPitch(timeData, this.audioCtx.sampleRate)
+    // Phase 1: Throttling to cut GC pressure and CPU usage
+    const now = Date.now();
+    if (now - this._lastAnalysis < this._throttleMs) {
+      return this._lastCachedFp;
+    }
+    this._lastAnalysis = now;
+
+    // Reuse buffers
+    this.analyser.getByteFrequencyData(this._freqData);
+    this.analyser.getByteTimeDomainData(this._timeData);
+
+    this._lastCachedFp = {
+      fp: this.voiceAnalyzer.getMelEnergy(this._freqData, this.audioCtx.sampleRate, this.FFT_SIZE),
+      pitch: this.voiceAnalyzer.getPitch(this._timeData, this.audioCtx.sampleRate)
     };
+    return this._lastCachedFp;
   }
 
   compareFingerprint(fp, pitch, signature) {
@@ -104,20 +137,26 @@ export class AudioEngine {
 class VoiceAnalyzer {
   constructor() {
     this.melBins = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500, 2800, 3100, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000];
+    // Phase 1: Pre-allocated energy buffer
+    this._energiesBuffer = new Float32Array(this.melBins.length);
   }
 
   getMelEnergy(dataArray, sampleRate, fftSize) {
     const binFreq = sampleRate / fftSize;
-    const energies = new Float32Array(this.melBins.length);
+    
+    // Reuse buffer
     for (let i = 0; i < this.melBins.length; i++) {
       const startBin = Math.floor(this.melBins[i] / binFreq);
       const endBin = Math.floor((this.melBins[i+1] || this.melBins[i]*1.2) / binFreq);
       let sum = 0, count = 0;
       for (let j = startBin; j <= endBin && j < dataArray.length; j++) { sum += dataArray[j]; count++; }
-      energies[i] = count > 0 ? sum / count : 0;
+      this._energiesBuffer[i] = count > 0 ? sum / count : 0;
     }
-    const maxE = Math.max(...energies) || 1;
-    return Array.from(energies).map(v => v / maxE);
+    
+    const maxE = Math.max(...this._energiesBuffer) || 1;
+    // Note: We still return an Array here for downstream comparison consistency, 
+    // but the heavy lifting is done in the pre-allocated buffer.
+    return Array.from(this._energiesBuffer).map(v => v / maxE);
   }
 
   getPitch(timeData, sampleRate) {
@@ -131,6 +170,7 @@ class VoiceAnalyzer {
     }
     return bestLag > 0 ? sampleRate / bestLag : 0;
   }
+
 
   compare(fp, pitch, signature) {
     if (!signature || !fp || !signature.signature) return 0;

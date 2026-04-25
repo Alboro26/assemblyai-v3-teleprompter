@@ -1,55 +1,82 @@
+/**
+ * js/camera.js - Handles webcam access and frame capture for multimodal AI.
+ */
 export class CameraManager {
-    /**
-     * @param {HTMLVideoElement} videoEl - The video element for the feed.
-     */
-    constructor(videoEl, eventBus) {
-        this.stream = null;
-        this.videoEl = videoEl;
-        this.eventBus = eventBus;
-        this.canvas = document.createElement('canvas');
+  constructor(videoElement, eventBus) {
+    this.video = videoElement;
+    this.eventBus = eventBus;
+    this.stream = null;
+    this.isActive = false;
 
-        if (this.eventBus) {
-            this.eventBus.on('camera:start', () => this.start());
-            this.eventBus.on('camera:stop', () => this.stop());
-        }
+    // Optional: Pre-canvas for reuse
+    this.canvas = document.createElement('canvas');
+    this.ctx = this.canvas.getContext('2d', { alpha: false });
+
+    this.eventBus.on('camera:start', () => this.start());
+    this.eventBus.on('camera:stop', () => this.stop());
+  }
+
+  async start() {
+    if (this.isActive) return;
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+      this.video.srcObject = this.stream;
+      this.isActive = true;
+      console.log('[Camera] Stream started');
+    } catch (err) {
+      console.error('[Camera] Access denied:', err);
+      // Audit Fix: Emit status change on failure
+      this.eventBus.emit('status:change', { text: 'Camera Denied', type: 'error' });
+    }
+  }
+
+  stop() {
+    if (!this.isActive) return;
+    if (this.stream) {
+      this.stream.getTracks().forEach(track => track.stop());
+    }
+    this.video.srcObject = null;
+    this.isActive = false;
+    console.log('[Camera] Stream stopped');
+  }
+
+  /**
+   * Captures the current frame and returns a Base64 string.
+   * Phase 2: Downsizes image to max 1024px to reduce memory/bandwidth.
+   */
+  captureBase64() {
+    if (!this.isActive || this.video.readyState !== 4) return null;
+
+    const maxDimension = 1024;
+    let w = this.video.videoWidth;
+    let h = this.video.videoHeight;
+
+    // Calculate aspect ratio
+    if (w > h) {
+      if (w > maxDimension) {
+        h *= maxDimension / w;
+        w = maxDimension;
+      }
+    } else {
+      if (h > maxDimension) {
+        w *= maxDimension / h;
+        h = maxDimension;
+      }
     }
 
-    async start() {
-        if (!this.videoEl) return false;
-        try {
-            this.stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
-            });
-            this.videoEl.srcObject = this.stream;
-            await this.videoEl.play();
-            return true;
-        } catch (err) {
-            console.error("Camera error:", err);
-            return false;
-        }
-    }
+    this.canvas.width = w;
+    this.canvas.height = h;
 
-    stop() {
-        if (this.stream) {
-            this.stream.getTracks().forEach(t => t.stop());
-            this.stream = null;
-        }
-        if (this.videoEl) {
-            this.videoEl.srcObject = null;
-        }
-    }
-
-    /**
-     * Captures the current video frame and returns it as a Base64 JPEG data URL.
-     * @returns {string|null} Base64 data URL or null if no stream is active.
-     */
-    captureBase64() {
-        if (!this.videoEl || !this.stream) return null;
-        const w = this.videoEl.videoWidth || 1280;
-        const h = this.videoEl.videoHeight || 720;
-        this.canvas.width = w;
-        this.canvas.height = h;
-        this.canvas.getContext('2d').drawImage(this.videoEl, 0, 0, w, h);
-        return this.canvas.toDataURL('image/jpeg', 0.85);
-    }
+    this.ctx.drawImage(this.video, 0, 0, w, h);
+    
+    // Phase 2: Use 0.8 quality for smaller payloads
+    return this.canvas.toDataURL('image/jpeg', 0.8);
+  }
 }

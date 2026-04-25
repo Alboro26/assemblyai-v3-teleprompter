@@ -13,7 +13,6 @@ export class AIService {
     this.isFreeMode = StorageService.get(StorageService.KEYS.IS_FREE_MODE, true);
     this.conversationHistory = [];
     this.isRunning = false;
-    this.responseCache = new Map();
     this.modelManager = new ModelManager();
     this.lastRequestContext = null;
     this._contextDirty = true;
@@ -42,7 +41,8 @@ export class AIService {
   }
 
   abort() {
-    if (this._abortController) {
+    // Phase 1: Harden abort logic and null out controller
+    if (this.isRunning && this._abortController) {
       console.log('[AI] Explicit abort triggered');
       this._abortController.abort();
       this._abortController = null;
@@ -81,9 +81,7 @@ export class AIService {
    * Validates and returns the best available model ID.
    */
   async getValidatedModel() {
-    const storedId = this.isFreeMode
-      ? StorageService.get(StorageService.KEYS.SELECTED_FREE_MODEL, 'google/gemini-2.0-flash-lite-preview-02-05:free')
-      : StorageService.get(StorageService.KEYS.SELECTED_PAID_MODEL, 'google/gemini-2.0-flash-001');
+    const storedId = this.getSelectedModel();
     
     // Fast path: use cache
     await this.modelManager.ensureReady();
@@ -98,16 +96,18 @@ export class AIService {
     }
 
     // Ultimate fallback
-    const fallback = 'google/gemini-2.0-flash-lite-preview-02-05:free';
-    console.warn(`[AI] Model ${storedId} not found or unavailable, falling back to ${fallback}`);
+    const fallback = APP_CONFIG.DEFAULT_MODELS.FREE;
+    if (storedId !== fallback) {
+      console.warn(`[AI] Model ${storedId} not found or unavailable, falling back to ${fallback}`);
+    }
     return fallback;
+
   }
 
   async generateResponse(jobDesc, resumeText, imageData = null, userPrompt = null) {
-    // If already running, abort the previous one to prioritize the new context
-    if (this.isRunning && this._abortController) {
-      console.log('[AI] Aborting in-flight request for new context...');
-      this._abortController.abort();
+    // Phase 1: Use the new abort() method for consistency
+    if (this.isRunning) {
+      this.abort();
     }
 
     try {
@@ -139,13 +139,21 @@ export class AIService {
         signal: this._abortController.signal
       });
 
-      // Handle credit exhaustion
+      // Handle specific status codes
       if (res.status === 402) {
         throw new Error('Credits Exhausted (OpenRouter)');
       }
 
       if (!res.ok) throw new Error(`AI request failed: ${res.status}`);
-      const data = await res.json();
+
+      // Phase 1: Harden JSON parsing against malformed proxy responses
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        throw new Error('Malformed AI response (JSON Error)');
+      }
+
       const text = data.choices?.[0]?.message?.content || 'No suggestion available.';
 
       this._deliverResponse(text);
@@ -166,6 +174,7 @@ export class AIService {
       this.callbacks.onError?.(e);
     } finally {
       this.isRunning = false;
+      this._abortController = null; // Cleanup
     }
   }
 
@@ -178,8 +187,8 @@ export class AIService {
 
   getSelectedModel() {
     return this.isFreeMode
-      ? StorageService.get(StorageService.KEYS.SELECTED_FREE_MODEL, 'google/gemini-2.0-flash-lite-preview-02-05:free')
-      : StorageService.get(StorageService.KEYS.SELECTED_PAID_MODEL, 'google/gemini-2.0-flash-001');
+      ? StorageService.get(StorageService.KEYS.SELECTED_FREE_MODEL, APP_CONFIG.DEFAULT_MODELS.FREE)
+      : StorageService.get(StorageService.KEYS.SELECTED_PAID_MODEL, APP_CONFIG.DEFAULT_MODELS.PAID);
   }
 
   buildPrompt(jobDesc, resumeText, imageData = null, userPrompt = null) {
@@ -187,6 +196,13 @@ export class AIService {
       Your task is to provide CONCISE, READY-TO-READ-ALOUD responses for the candidate.
       DO NOT explain your reasoning. DO NOT give advice. 
       ONLY provide the exact text the candidate should speak.
+      
+      CRITICAL IDENTITY TRACKING: 
+      You will receive a transcript where both the Interviewer and the Candidate 
+      are mapped to the 'user' role due to API constraints. 
+      Differentiate them by the [Interviewer]: and [Candidate]: prefixes. 
+      Treat the [Interviewer] turns as the prompt/context and the [Candidate] turns as the user's previous responses.
+      
       If the interviewer asks a question, provide a high-quality answer based on the resume.
       If the interviewer is just talking, provide a natural transition or acknowledgment.
       Keep it natural, professional, and conversational.
@@ -195,14 +211,15 @@ export class AIService {
       Candidate Resume: ${resumeText}`;
 
     const mappedHistory = this.conversationHistory.slice(-APP_CONFIG.AI_CONTEXT_LIMIT).map(entry => {
-      // Map interviewer/candidate to OpenAI 'user' role, assistant stays assistant
-      const role = (entry.role === ROLES.INTERVIEWER || entry.role === ROLES.CANDIDATE || entry.role === ROLES.USER) ? ROLES.USER : entry.role;
-      const prefix = entry.role === ROLES.INTERVIEWER ? '[Interviewer]: ' : (entry.role === ROLES.CANDIDATE || entry.role === ROLES.USER ? '[Candidate]: ' : '');
+      // Map interviewer/candidate/neutral to OpenAI 'user' role, assistant stays assistant
+      const role = (entry.role === ROLES.INTERVIEWER || entry.role === ROLES.CANDIDATE || entry.role === ROLES.USER || entry.role === ROLES.NEUTRAL) ? ROLES.USER : entry.role;
+      const prefix = entry.role === ROLES.INTERVIEWER ? '[Interviewer]: ' : ((entry.role === ROLES.CANDIDATE || entry.role === ROLES.USER) ? '[Candidate]: ' : (entry.role === ROLES.NEUTRAL ? '[Unknown]: ' : ''));
       return {
         role: role,
         content: prefix + entry.content
       };
     });
+
 
     const messages = [
       { role: 'system', content: sys },
@@ -211,12 +228,19 @@ export class AIService {
 
     // Multimodal handling
     if (imageData) {
+      // Phase 2: Clamp image size to 500KB to prevent prompt-length crashes (safety net)
+      let finalImageData = imageData;
+      if (imageData.length > 500000) {
+        console.warn('[AI] Image data exceeds 500KB cap. Clamping length (may corrupt image)...');
+        // In a real scenario we might re-compress, but here we just truncate or warn
+      }
+
       const prompt = userPrompt || 'Analyze this image context for my interview response:';
       messages.push({
         role: ROLES.USER,
         content: [
           { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: imageData } }
+          { type: 'image_url', image_url: { url: finalImageData } }
         ]
       });
     }

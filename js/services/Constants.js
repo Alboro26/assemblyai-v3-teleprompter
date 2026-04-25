@@ -37,5 +37,10 @@ export const APP_CONFIG = {
   MERGE_THRESHOLD_MS: 1500, // Deterministic gap for smart wrapping
   MERGE_NEUTRAL_THRESHOLD: 500, // ms
   ABORT_AFTER_CANDIDATE_SPEECH_MS: 15000, // ms
-  INTERLEAVING_POLICY: 'break' // 'break' or 'allow' merging around AI turns
+  INTERLEAVING_POLICY: 'break', // 'break' or 'allow' merging around AI turns
+  DEFAULT_MODELS: {
+    FREE: 'google/gemini-2.0-flash-lite-preview-02-05:free',
+    PAID: 'google/gemini-2.0-flash-001'
+  }
 };
+

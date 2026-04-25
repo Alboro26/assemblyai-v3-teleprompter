@@ -4,7 +4,8 @@
   --panel-bg: hsl(240, 10%, 8%);
   --text-main: hsl(252, 20%, 95%);
   --text-muted: hsl(252, 10%, 55%);
-  --accent: hsl(252, 100%, 68%);
+  --accent: hsl(252, 100%, 66%); /* Rich Purple */
+
   --danger: hsl(0, 84%, 60%);
   --success: hsl(142, 76%, 36%);
   --border: rgba(255, 255, 255, 0.15);
@@ -516,9 +517,9 @@ html, body {
 .transcript-entry:active { transform: scale(0.98) translateX(4px); }
 
 .transcript-entry.interviewer {
-  background: rgba(245, 158, 11, 0.05);
+  background: rgba(245, 158, 11, 0.08);
   border-left: 3px solid #f59e0b;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-style: italic;
   align-self: flex-start;
 }
@@ -538,8 +539,11 @@ html, body {
 }
 
 .transcript-entry.candidate {
-  background: rgba(59, 130, 246, 0.05);
+  background: rgba(99, 102, 241, 0.12);
   border-left: 3px solid var(--accent);
+
+  color: var(--text-main);
+  font-style: normal; /* Explicitly reset italics */
   align-self: flex-start;
 }
 

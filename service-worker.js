@@ -1,24 +1,20 @@
-const CACHE_NAME = 'teleprompter-v14';
-const ASSETS = [
+const CACHE_NAME = 'teleprompter-v18';
+
+// Phase 5: Hard Cache Busting
+// We use a Network-First strategy for CSS/JS to ensure the user 
+// always sees the latest design updates during this audit phase.
+
+const PRE_CACHE = [
   '/',
   '/index.html',
   '/offline.html',
-  '/manifest.json',
-  '/css/app.css',
-  '/js/ui.js',
-  '/js/stt.js',
-  '/js/audio.js',
-  '/js/ai.js',
-  '/js/camera.js',
-  '/js/audio-worklet-processor.js',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png'
+  '/manifest.json'
 ];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRE_CACHE))
   );
 });
 
@@ -26,7 +22,12 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            console.log('[SW] Deleting old cache:', key);
+            return caches.delete(key);
+          }
+        })
       );
     })
   );
@@ -36,33 +37,38 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // Bypass cache completely for API calls and WebSockets
-  if (url.pathname.startsWith('/.netlify/functions/') || url.hostname.includes('assemblyai') || url.hostname.includes('openrouter')) {
+  // 1. Bypass for APIs and Non-HTTP
+  if (
+    !url.protocol.startsWith('http') ||
+    url.pathname.startsWith('/.netlify/functions/') || 
+    url.hostname.includes('assemblyai') || 
+    url.hostname.includes('openrouter.ai') ||
+    e.request.method !== 'GET'
+  ) {
     return e.respondWith(fetch(e.request));
   }
 
-  // Network-First for JS and CSS — always get fresh code
-  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
+  // 2. Network-First Strategy for CSS and JS (Ensures latest design)
+  if (url.pathname.endsWith('.css') || url.pathname.endsWith('.js')) {
     return e.respondWith(
       fetch(e.request)
         .then((res) => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, resClone));
           return res;
         })
         .catch(() => caches.match(e.request))
     );
   }
 
-  // Cache-First for everything else (images, fonts, HTML)
+  // 3. Stale-While-Revalidate for everything else
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) return cachedResponse;
-      return fetch(e.request).catch(() => {
-        if (e.request.mode === 'navigate') {
-          return caches.match('/offline.html');
-        }
+    caches.match(e.request).then((res) => {
+      const fetchPromise = fetch(e.request).then((networkRes) => {
+        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, networkRes.clone()));
+        return networkRes;
       });
+      return res || fetchPromise;
     })
   );
 });

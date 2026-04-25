@@ -29,9 +29,10 @@ class AudioStreamProcessor extends AudioWorkletProcessor {
         this.port.postMessage(int16Data.buffer, [int16Data.buffer]);
         
         this.bufferIndex = 0;
-        this.buffer = new Float32Array(this.bufferSize);
+        // Removed: this.buffer = new Float32Array(this.bufferSize); // Optimization: Reuse buffer to cut GC pressure
       }
     }
+
     
     return true; // Keep processor alive
   }

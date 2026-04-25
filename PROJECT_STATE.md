@@ -1,24 +1,24 @@
 # Project State Summary: Interview Teleprompter Modernization
 
-**Last Updated**: 2026-04-24
-**Current Status**: Production Stabilization & Diarization Polish (In Progress)
+**Last Updated**: 2026-04-25
+**Current Status**: UI Logic Hardened & Transcript Sync Stabilized (Completed)
 
 ## ✅ Accomplishments
-- **Defensive UI Hardening**: Resolved the "Single Point of Failure" in the settings system. Both `saveSettings` and `loadConfig` are now fully null-safe, preventing DOM-mismatch crashes.
-- **Infrastructure Ready**: `Constants.js` updated to support `LEARNED_CANDIDATE_LABEL` and `INTERVIEWER_LABEL_OVERRIDE` for session-level identity persistence.
-- **The Global Flip**: Implemented retroactive role synchronization and surgical, flicker-free UI updates in `ui.js`.
-- **AI Kill Switch**: Finalized `AIService.abort()` for robust credit protection during role corrections.
-- **UI Persistence Badge**: Added a high-visibility badge to the footer to show the current "Locked" speaker label.
-- **Live Context Inspector**: Refactored the "Raw AI Context" viewer into a live-updating monitor that polls state and history in real-time.
+- **Transcript Role Toggle Fix**: Resolved the critical failure where role changes didn't visually update. Implemented delegated event handling and surgical DOM manipulation.
+- **Index Desynchronization Fix**: Corrected `renderTranscript` logic to ensure DOM indices (`data-index`) map accurately to the full `conversationHistory` array even when filtered (e.g., hiding Assistant messages).
+- **Hardened UI Reflows**: Added forced layout reflows (`void node.offsetWidth`) in `surgicalUpdateEntryRole` to clear "sticky" hover shadows and transition glitches.
+- **Merged STT Sync**: Updated `renderTranscript` to synchronize `textContent` for existing nodes, ensuring that merged speech results update on screen without requiring new node creation.
+- **Asset Versioning**: Bumped `index.html` script versions to `v=19` for cache busting.
+- **Root Cause Identification**: Confirmed that blue-light filters (like f.lux) can create an optical illusion making the purple candidate theme appear orange/brown at night.
 
 ## 🛠️ Architectural Decisions
-- **Session-Level Orchestration**: Moving away from "reactive" bubble-by-bubble correction to "proactive" identity locking. Once a speaker is identified, the system retroactively corrects the entire session history.
-- **Inclusive Interviewer Mapping**: Standardized on a "Candidate-First" model where anyone not the candidate is treated as an interviewer, with an optional "Neutral Filter" for noise.
+- **Surgical DOM Pattern**: Preferring atomic `classList` and `textContent` updates over full `innerHTML` re-renders to maintain performance and prevent scroll-jumping during live streaming.
+- **Delegated Event Listeners**: Standardizing on single parent listeners (e.g., `#transcriptMessages`) rather than attaching thousands of inline `onclick` handlers to individual transcript bubbles.
 
 ## 🚀 Next Steps / Pending
-- **Temporal Merging**: Fine-tune consecutive turn merging to handle rapid speaker transitions.
-- **Calibration Retry**: Add a way to reset calibration if the environment is too noisy.
+- **UI Refresh**: Add a subtle animation (e.g., a "flash" effect) when a role is toggled to provide clearer visual feedback.
+- **Clear History Polish**: Ensure the "Clear History" button correctly wipes all locked speaker states to prevent state leakage between sessions.
 
 ## Known Issues & Technical Debt
-- **PWA Cache Ghosting**: Service Worker may serve stale `index.html` versions. (Mitigation: Added defensive null-checks in JS to prevent crashes).
-- **Inspection Lag**: The "Raw AI Context" viewer displays a snapshot of the last *triggered* request.
+- **Ambient Light/Blue Light Filters**: Purple accent colors may shift toward orange/brown on systems with aggressive Night Light settings (Verified: f.lux intersection).
+- **Service Worker Lifecycle**: Despite versioning, some browsers may require a manual hard refresh (`Ctrl+F5`) or Service Worker unregistration to pick up script changes instantly.

@@ -60,6 +60,8 @@ class AppController {
       isInspectorActive: false
     };
 
+    this._togglingEntry = null; // Idempotency Guard
+
     // 3. Services
     this.ai = new AIService(this.eventBus);
     this.toast = new ToastService(this.eventBus);
@@ -185,6 +187,17 @@ class AppController {
         const d = document.getElementById('mergeThresholdDisplay');
         if (d) d.textContent = parseFloat(e.target.value).toFixed(1);
       });
+
+      // Delegated Transcript Click Handler (Atomic & surgical)
+      const transcriptContainer = document.getElementById('transcriptMessages');
+      if (transcriptContainer) {
+        transcriptContainer.addEventListener('click', (e) => {
+          const entryEl = e.target.closest('.transcript-entry');
+          if (!entryEl) return;
+          const idx = parseInt(entryEl.getAttribute('data-index'), 10);
+          if (!isNaN(idx)) this.toggleEntryRole(idx);
+        });
+      }
     } catch (e) {
       console.error("Critical UI binding failure:", e);
     }
@@ -612,6 +625,15 @@ class AppController {
     
     const sRaw = String(label).toLowerCase().replace(/speaker\s*/, '').trim();
 
+    // 0. CHECK ROLE LOCK (Priority 0): If the user manually corrected this label, respect it.
+    const lockedEntry = this.state.conversationHistory.find(
+      e => e.rawLabel === label && e.roleLocked
+    );
+    if (lockedEntry) {
+      console.log(`[UI] identifyRole: Respecting locked role ${lockedEntry.role} for ${label}`);
+      return lockedEntry.role;
+    }
+
     // 1. Check interviewer override (Global Priority)
     if (this.state.interviewerLabelOverride) {
       return (sRaw === this.state.interviewerLabelOverride) ? ROLES.INTERVIEWER : ROLES.CANDIDATE;
@@ -629,8 +651,9 @@ class AppController {
       return (sRaw === sCand) ? ROLES.CANDIDATE : ROLES.INTERVIEWER;
     }
 
-    // 4. Default to Interviewer (Safety first for suggestions)
-    return ROLES.INTERVIEWER;
+    // 4. Default to Candidate (Your voice)
+    return ROLES.CANDIDATE;
+
   }
 
   handleFinalTranscript(data) {
@@ -645,7 +668,21 @@ class AppController {
     const now = data.originalTimestamp || Date.now();
 
     // Centralized Role Identification
-    const aiRole = this.identifyRole(rawLabel);
+    let aiRole = this.identifyRole(rawLabel);
+
+    // PERSISTENCE: If we are merging into a role-locked entry, respect the lock
+    let lastHumanEntry = null;
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].role !== ROLES.ASSISTANT) {
+        lastHumanEntry = history[i];
+        break;
+      }
+    }
+    
+    if (data.replaceLast && lastHumanEntry?.roleLocked) {
+      aiRole = lastHumanEntry.role;
+      console.log(`[UI] Role Locked: Preserving manual role ${aiRole} for ${rawLabel}`);
+    }
     
     console.log(`[UI] Classification: raw=${rawLabel} -> role=${aiRole} (learned=${this.state.learnedCandidateLabel})`);
 
@@ -663,7 +700,6 @@ class AppController {
     }
 
     // SMART MERGE LOGIC (Deterministic Gap Merging)
-    let lastHumanEntry = null;
     let lastHumanIndex = -1;
 
     // 1. Find the last human entry
@@ -793,6 +829,10 @@ class AppController {
         console.log('[UI] Applying pending suggestion (Candidate finished speaking)');
         this.applyAIResponse(this.state.pendingSuggestion);
         this.state.pendingSuggestion = null;
+        if (this._safetyValveTimer) {
+          clearTimeout(this._safetyValveTimer);
+          this._safetyValveTimer = null;
+        }
       }
     }
 
@@ -831,6 +871,18 @@ class AppController {
     if (this.state.isCandidateSpeaking) {
       console.log('[UI] Candidate is speaking. Queuing suggestion for later display.');
       this.state.pendingSuggestion = text;
+      
+      // Phase 3: Safety Valve - If candidate speaks for >30s, force the suggestion anyway
+      if (!this._safetyValveTimer) {
+        this._safetyValveTimer = setTimeout(() => {
+          if (this.state.pendingSuggestion) {
+            console.log('[UI] Safety Valve Triggered: Forcing suggestion display.');
+            this.applyAIResponse(this.state.pendingSuggestion);
+            this.state.pendingSuggestion = null;
+          }
+          this._safetyValveTimer = null;
+        }, 30000);
+      }
     } else {
       this.applyAIResponse(text);
     }
@@ -851,21 +903,70 @@ class AppController {
   renderTranscript() {
     const hist = document.getElementById('transcriptMessages');
     if (!hist) return;
-    hist.innerHTML = '';
-    this.state.conversationHistory.forEach((entry, idx) => {
-      if (entry.role === ROLES.ASSISTANT) return;
-      const p = document.createElement('p');
-      p.className = `transcript-entry ${entry.role}`;
-      p.setAttribute('data-index', idx);
-      if (entry.rawLabel) p.setAttribute('data-speaker', entry.rawLabel);
-      p.textContent = entry.content;
-      p.onclick = () => this.toggleEntryRole(idx);
-      hist.appendChild(p);
-    });
-    hist.scrollTop = hist.scrollHeight;
+    
+    const history = this.state.conversationHistory;
+    
+    // Extract only human messages while preserving their original array index
+    const humanEntries = history
+      .map((entry, idx) => ({ entry, idx }))
+      .filter(item => item.entry.role !== ROLES.ASSISTANT);
+      
+    const currentNodesCount = hist.children.length;
+    
+    // 1. Sync text for existing nodes (handles STT merging where length doesn't change)
+    const existingCount = Math.min(humanEntries.length, currentNodesCount);
+    for (let i = 0; i < existingCount; i++) {
+      const p = hist.children[i];
+      const entry = humanEntries[i].entry;
+      if (p && p.textContent !== entry.content) {
+        p.textContent = entry.content;
+      }
+    }
+    
+    // 2. Append new nodes if history grew
+    if (humanEntries.length > currentNodesCount) {
+      const fragment = document.createDocumentFragment();
+      const newHumanEntries = humanEntries.slice(currentNodesCount);
+      
+      newHumanEntries.forEach(({ entry, idx }) => {
+        const p = document.createElement('p');
+        p.className = `transcript-entry ${entry.role}`;
+        p.setAttribute('data-index', idx);
+        p.setAttribute('data-role', entry.role);
+        if (entry.rawLabel) p.setAttribute('data-speaker', entry.rawLabel);
+
+        p.textContent = entry.content;
+        fragment.appendChild(p);
+      });
+      
+      hist.appendChild(fragment);
+      
+      // Auto-scroll only if we added something
+      const container = document.getElementById('transcriptHistory');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    } else if (humanEntries.length < currentNodesCount || history.length === 0) {
+      // Full re-render only for clear/prune/correction
+      hist.innerHTML = '';
+      humanEntries.forEach(({ entry, idx }) => {
+        const p = document.createElement('p');
+        p.className = `transcript-entry ${entry.role}`;
+        p.setAttribute('data-index', idx);
+        p.setAttribute('data-role', entry.role);
+        if (entry.rawLabel) p.setAttribute('data-speaker', entry.rawLabel);
+        p.textContent = entry.content;
+        hist.appendChild(p);
+      });
+    }
   }
 
   toggleEntryRole(index) {
+    // Idempotency Guard: Prevent double-fire from any source
+    if (this._togglingEntry === index) return;
+    this._togglingEntry = index;
+    setTimeout(() => { this._togglingEntry = null; }, 50);
+
     const entry = this.state.conversationHistory[index];
     if (!entry || entry.role === ROLES.ASSISTANT) return;
 
@@ -897,15 +998,19 @@ class AppController {
       this.state.conversationHistory.forEach(e => {
         if (e.rawLabel === entry.rawLabel) {
           e.role = newRole;
+          e.roleLocked = true;
         }
       });
 
       // Surgical DOM update to avoid flicker
       const nodes = document.querySelectorAll(`.transcript-entry[data-speaker="${entry.rawLabel}"]`);
       nodes.forEach(node => {
-        node.className = `transcript-entry ${newRole}`;
+        this.surgicalUpdateEntryRole(node, newRole);
       });
     }
+
+    entry.roleLocked = true; // Protect from auto-reclassification
+
 
     // AI KILL SWITCH (Credit Protection)
     if (newRole === ROLES.CANDIDATE) {
@@ -919,7 +1024,10 @@ class AppController {
 
     // Surgical DOM update for the toggled entry
     const node = document.querySelector(`.transcript-entry[data-index="${index}"]`);
-    if (node) node.className = `transcript-entry ${newRole}`;
+    if (node) {
+      this.surgicalUpdateEntryRole(node, newRole);
+    }
+
 
     console.log(`[UI] Toggled role for entry ${index}: ${oldRole} -> ${entry.role}`);
 
@@ -931,6 +1039,27 @@ class AppController {
     if (entry.role === ROLES.INTERVIEWER) {
       this.requestAISuggestion();
     }
+  }
+
+  surgicalUpdateEntryRole(node, newRole) {
+    if (!node) return;
+    
+    // Hardened Class Swap
+    node.classList.remove('interviewer', 'candidate', 'neutral');
+    
+    // Kill lingering transition to prevent "sticky shadow"
+    node.style.transition = 'none';
+    void node.offsetWidth; // Force Reflow
+    
+    node.classList.add(newRole);
+    node.setAttribute('data-role', newRole);
+    
+    // Restore transition after reflow
+    setTimeout(() => {
+      if (node) node.style.transition = '';
+    }, 10);
+    
+    console.log(`[UI] Surgical Update: Set node to ${newRole} (Reflowed)`);
   }
 
   // --- HUD / Coding Mode Methods ---
