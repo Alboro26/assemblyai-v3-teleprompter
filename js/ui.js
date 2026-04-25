@@ -56,7 +56,8 @@ class AppController {
       lastCapturedImage: null, // Buffer for multimodal AI
       isCandidateSpeaking: false,
       interviewerLabelOverride: StorageService.get(StorageService.KEYS.INTERVIEWER_LABEL_OVERRIDE, null),
-      pendingSuggestion: null
+      pendingSuggestion: null,
+      isInspectorActive: false
     };
 
     // 3. Services
@@ -142,7 +143,8 @@ class AppController {
         this.startCalibration();
       });
       this._bind('btnStartSession', 'onclick', async () => await this.startSession());
-      this._bind('btnInspectContext', 'onclick', () => this.showInspector());
+      this._bind('btnInspectContext', 'onclick', () => this.toggleInspector(true));
+      this._bind('btnCloseInspector', 'onclick', () => this.toggleInspector(false));
       this._bind('btnSaveSettings', 'onclick', () => this.saveSettings());
       this._bind('btnCancelCalibration', 'onclick', () => this.stopCalibration());
 
@@ -402,7 +404,23 @@ class AppController {
     this.updateStatus('ok', `Mode: ${mode.toUpperCase()}`);
   }
 
-  showInspector() {
+  toggleInspector(show) {
+    this.state.isInspectorActive = show;
+    const modal = document.getElementById('inspectorModal');
+    if (modal) {
+      modal.classList.toggle('active', show);
+      if (show) {
+        this.updateInspector();
+        this._inspectorInterval = setInterval(() => this.updateInspector(), 2000);
+      } else if (this._inspectorInterval) {
+        clearInterval(this._inspectorInterval);
+        this._inspectorInterval = null;
+      }
+    }
+  }
+
+  updateInspector() {
+    if (!this.state.isInspectorActive) return;
     const jobDesc = document.getElementById('jobDescription')?.value || '';
     const resumeText = document.getElementById('resumeText')?.value || '';
     this.eventBus.emit('ai:get-last-context', { jobDesc, resumeText });
@@ -538,6 +556,17 @@ class AppController {
         container.style.display = 'block';
       } else {
         container.style.display = 'none';
+      }
+    }
+
+    const mainBadge = document.getElementById('lockedSpeakerBadge');
+    const mainValue = document.getElementById('lockedSpeakerValue');
+    if (mainBadge && mainValue) {
+      if (this.state.learnedCandidateLabel) {
+        mainValue.textContent = this.state.learnedCandidateLabel.toUpperCase();
+        mainBadge.style.display = 'inline-flex';
+      } else {
+        mainBadge.style.display = 'none';
       }
     }
   }
@@ -723,6 +752,9 @@ class AppController {
     this.renderTranscript();
     this.eventBus.emit(EVENTS.AI_UPDATE_HISTORY, { history: this.state.conversationHistory });
 
+    // Live Inspector Update
+    if (this.state.isInspectorActive) this.updateInspector();
+
     // 4. SMART AI TRIGGER: Determine if we should ask for a suggestion
     const finalEntry = shouldMerge ? lastHumanEntry : history[history.length - 1];
     
@@ -791,6 +823,9 @@ class AppController {
     StorageService.set(StorageService.KEYS.CONVERSATION_HISTORY, this.state.conversationHistory);
     this.renderTranscript();
     this.eventBus.emit(EVENTS.AI_UPDATE_HISTORY, { history: this.state.conversationHistory });
+
+    // Live Inspector Update
+    if (this.state.isInspectorActive) this.updateInspector();
 
     // Phase 2: Update Teleprompter (Deferred if candidate is speaking)
     if (this.state.isCandidateSpeaking) {

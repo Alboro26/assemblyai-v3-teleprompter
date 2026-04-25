@@ -99,6 +99,9 @@
           <button id="btnSelectAssembly" class="engine-toggle active">Cloud</button>
           <button id="btnSelectLocal" class="engine-toggle">Local</button>
         </div>
+        <div id="lockedSpeakerBadge" class="learned-label-badge" style="display:none; margin-left: 0.5rem; border-color: var(--success); background: rgba(16, 185, 129, 0.1); color: var(--success);">
+          Locked: <span id="lockedSpeakerValue">0</span>
+        </div>
       </div>
 
       <div class="bar-center">
@@ -274,8 +277,7 @@
     <div class="modal" style="max-width: 800px;">
       <h2>Raw AI Context</h2>
       <pre id="inspectorContent" class="inspector-pre"></pre>
-      <button class="btn-save secondary"
-        onclick="document.getElementById('inspectorModal').classList.remove('active')">Close</button>
+      <button class="btn-save secondary" id="btnCloseInspector">Close</button>
     </div>
   </div>
 
