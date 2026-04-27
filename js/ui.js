@@ -700,9 +700,10 @@ class AppController {
     }
 
     // SMART MERGE LOGIC (Deterministic Gap Merging)
+    lastHumanEntry = null;
     let lastHumanIndex = -1;
 
-    // 1. Find the last human entry
+    // 1. Find the last human entry (RE-SCAN after potential splice)
     for (let i = history.length - 1; i >= 0; i--) {
       if (history[i].role !== ROLES.ASSISTANT) {
         lastHumanEntry = history[i];
@@ -918,8 +919,18 @@ class AppController {
     for (let i = 0; i < existingCount; i++) {
       const p = hist.children[i];
       const entry = humanEntries[i].entry;
-      if (p && p.textContent !== entry.content) {
-        p.textContent = entry.content;
+      if (p) {
+        if (p.textContent !== entry.content) {
+          p.textContent = entry.content;
+        }
+        // Role/Class Sync (Essential for merges that upgrade roles)
+        if (p.getAttribute('data-role') !== entry.role) {
+          p.className = `transcript-entry ${entry.role}`;
+          p.setAttribute('data-role', entry.role);
+        }
+        if (entry.rawLabel && p.getAttribute('data-speaker') !== entry.rawLabel) {
+          p.setAttribute('data-speaker', entry.rawLabel);
+        }
       }
     }
     

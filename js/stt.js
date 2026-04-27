@@ -170,7 +170,7 @@ export class STTManager {
 
     // Normalize: v3 (u3-rt-pro) often uses 'text' instead of 'transcript'
     const transcript = msg.text || msg.transcript || "";
-    const rawLabel = msg.speaker_label || msg.speaker;
+    const rawLabel = msg.speaker_label || msg.speaker || 'UNKNOWN';
 
     // If calibrating, capture the label
     if (this.isCalibrating && rawLabel !== undefined && rawLabel !== null) {

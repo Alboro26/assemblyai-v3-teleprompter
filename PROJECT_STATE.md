@@ -1,24 +1,30 @@
-# Project State Summary: Interview Teleprompter Modernization
+# Project State: Interview Teleprompter PWA
 
-**Last Updated**: 2026-04-25
-**Current Status**: UI Logic Hardened & Transcript Sync Stabilized (Completed)
+## 🎯 Current Milestone: DeepSeek Codebase Audit & UI Stabilization
+**Status**: Stable / Implementation
+**Branch**: `dev-merged`
+
+---
 
 ## ✅ Accomplishments
-- **Transcript Role Toggle Fix**: Resolved the critical failure where role changes didn't visually update. Implemented delegated event handling and surgical DOM manipulation.
-- **Index Desynchronization Fix**: Corrected `renderTranscript` logic to ensure DOM indices (`data-index`) map accurately to the full `conversationHistory` array even when filtered (e.g., hiding Assistant messages).
-- **Hardened UI Reflows**: Added forced layout reflows (`void node.offsetWidth`) in `surgicalUpdateEntryRole` to clear "sticky" hover shadows and transition glitches.
-- **Merged STT Sync**: Updated `renderTranscript` to synchronize `textContent` for existing nodes, ensuring that merged speech results update on screen without requiring new node creation.
-- **Asset Versioning**: Bumped `index.html` script versions to `v=19` for cache busting.
-- **Root Cause Identification**: Confirmed that blue-light filters (like f.lux) can create an optical illusion making the purple candidate theme appear orange/brown at night.
+- **Transcript Stabilization**: Fixed a critical UI regression in `js/ui.js` where role-toggling caused visual ghosting. Implemented `surgicalUpdateEntryRole` with forced reflow and `renderTranscript` with `textContent` synchronization.
+- **Safe Rendering**: Eliminated XSS risks by ensuring all transcript text is rendered via `textContent`, successfully debunking an AI-audit hallucination.
+- **DeepSeek Integration**: Developed `scripts/deepseek-audit.js`, a high-fidelity Node.js bridge to NVIDIA's DeepSeek API. 
+- **Streaming Verified**: Successfully resolved "hang" issues by hardening `scripts/deepseek-audit.js`:
+    - **User-Agent Spoofing**: Mimics `curl` to prevent silent drops.
+    - **SSL Flexibility**: Added `rejectUnauthorized: false` for Windows compatibility.
+    - **Model Fallback**: Identified `deepseek-v3.1-terminus` as a high-performance, stable alternative to the latent `v4-pro`.
+- **API Security Infrastructure**: Created `.env` system for `NVIDIA_API_KEY` and updated `.gitignore`.
 
-## 🛠️ Architectural Decisions
-- **Surgical DOM Pattern**: Preferring atomic `classList` and `textContent` updates over full `innerHTML` re-renders to maintain performance and prevent scroll-jumping during live streaming.
-- **Delegated Event Listeners**: Standardizing on single parent listeners (e.g., `#transcriptMessages`) rather than attaching thousands of inline `onclick` handlers to individual transcript bubbles.
+---
 
-## 🚀 Next Steps / Pending
-- **UI Refresh**: Add a subtle animation (e.g., a "flash" effect) when a role is toggled to provide clearer visual feedback.
-- **Clear History Polish**: Ensure the "Clear History" button correctly wipes all locked speaker states to prevent state leakage between sessions.
+## 🛠️ Technical Debt & Identified Issues
+- **Latency**: NVIDIA's V4 Pro and Flash models are currently experiencing extreme latency (>60s TTFT) in the local environment, triggering timeouts.
+- **Compatibility**: Node.js native `https` requires specific header alignment (User-Agent) to match `curl` success rates.
 
-## Known Issues & Technical Debt
-- **Ambient Light/Blue Light Filters**: Purple accent colors may shift toward orange/brown on systems with aggressive Night Light settings (Verified: f.lux intersection).
-- **Service Worker Lifecycle**: Despite versioning, some browsers may require a manual hard refresh (`Ctrl+F5`) or Service Worker unregistration to pick up script changes instantly.
+---
+
+## 🚀 Next Steps
+1. **Stabilize Model Selection**: Update `deepseek-audit.js` to use `deepseek-v3.1-terminus` as the default for reliable streaming audits.
+2. **Key Masking**: Explore moving the AI requests to a serverless backend to hide `NVIDIA_API_KEY`.
+3. **Audit Execution**: Run a full `services` audit using the now-verified streaming bridge.

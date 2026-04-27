@@ -1,27 +1,19 @@
-# SESSION TRANSFER: Transcript Role Toggle & Index Synchronization
-**Date**: 2026-04-25
-**Auditor**: Antigravity (AI)
-**Recipient**: Next AI Session / Senior Audit
+# SESSION TRANSFER: Transcript Stability & DeepSeek Audit
 
-## 📋 Audited Core Files
-The following files have been logic-verified and hardened against regressions related to role toggling and transcript rendering.
+## 1. Context Summary
+This session focused on two pillars: **UI Stability** and **Automated Auditing**. We successfully resolved a "Sticky Role" visual bug where transcript messages wouldn't update their color when toggled. We also built a robust automation bridge to NVIDIA's DeepSeek V4 API to perform a deep system audit.
 
-### 🎨 Design & UI
-1. **[ui.js](file:///c:/Users/alber/Desktop/copilot/interview-teleprompter/js/ui.js)**:
-   - **Fix**: Resolved `renderTranscript` index corruption. DOM `data-index` now accurately maps to `conversationHistory` even with filtered assistant messages.
-   - **Fix**: Updated `renderTranscript` to sync `textContent` for existing nodes, ensuring merged STT results update visually.
-   - **Hardening**: Implemented `surgicalUpdateEntryRole` with forced reflow (`void node.offsetWidth`) to eliminate "sticky" hover states and CSS transition glitches.
-   - **Architecture**: Switched to delegated event handling for the transcript container to prevent redundant listeners and memory leaks.
-2. **[index.html](file:///c:/Users/alber/Desktop/copilot/interview-teleprompter/index.html)**:
-   - **Caching**: Bumped script versions to `v=19` to ensure browser synchronization with the latest `ui.js` fixes.
+## 2. Technical Details
+- **UI Logic**: `surgicalUpdateEntryRole` in `js/ui.js` remains stable.
+- **Audit Tool**: `scripts/deepseek-audit.js` has been hardened for **Streaming Mode**. It now includes `User-Agent: curl/8.18.0` and `rejectUnauthorized: false` to ensure connectivity on Windows systems.
+- **Model Verification**: Verified that `deepseek-v4-pro` and `v4-flash` are currently latent. Successfully switched to `deepseek-v3.1-terminus` which streams perfectly.
+- **Diagnostic Scripts**: Added `scripts/test-nvidia-stream.js` as a lightweight probe for API health.
 
-### 🧠 Services & State
-3. **[ai.js](file:///c:/Users/alber/Desktop/copilot/interview-teleprompter/js/ai.js)**:
-   - **Event Loop**: Verified that `ai:update-history` emissions do not trigger unintended full re-renders in the UI.
-4. **[service-worker.js](file:///c:/Users/alber/Desktop/copilot/interview-teleprompter/service-worker.js)**:
-   - **Caching**: Verified the `Network-First` strategy for JS/CSS assets is functioning, though aggressive browser caches may still require manual `Ctrl+F5`.
+## 3. Outstanding Work
+- **Audit Completion**: The streaming bridge is now verified, but a full audit of the `services` and `frontend` groups using the stable `terminus` model is pending.
+- **Latency Monitoring**: Need to check if `v4-pro` latency recovers; otherwise, stick to `v3.1-terminus` for deep reviews.
 
-## ⚠️ Known Issues & Discoveries
-- **The f.lux / Night Light Factor**: A critical "phantom bug" was identified where the purple candidate theme appeared orange/brown due to OS-level blue-light filters (Verified: f.lux intersection). If the UI looks orange but DevTools shows `.candidate` with `rgb(116, 82, 255)`, it is an optical illusion.
-- **Role Locking**: Manual role toggles are now "locked" via `roleLocked: true` in the state, preventing automatic diarization from overriding user corrections.
-- **Sync Lag**: There is a minor visual lag in the "Locked" pill update compared to the surgical DOM change; this is intentional to prioritize immediate transcript feedback.
+## 4. Immediate Next Actions for the AI
+1. Run a fresh audit for the `services` group using the verified streaming script: `node scripts/deepseek-audit.js --model deepseek-ai/deepseek-v3.1-terminus --group services`.
+2. Cross-reference results with `DEEPSEEK_AUDIT_REPORT_FLASH.md`.
+3. Harden the `.env` loading logic in the main app to match the script's robustness if needed.
